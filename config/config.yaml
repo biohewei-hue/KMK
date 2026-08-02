@@ -1,0 +1,58 @@
+# ======================= 舆情交叉分析报告 · 配置 =======================
+
+# 持仓/监控池（15只）。请填入：代码(带交易所前缀 SH/SZ/BJ) + 名称 + 可选别名(用于舆情文本匹配)
+# 示例：
+#   - code: SH600519
+#     name: 贵州茅台
+#     aliases: [茅台]
+watchlist: []
+
+# 大盘指数（东方财富 secid 格式：市场.代码，1=沪 0=深）
+indexes:
+  - secid: "1.000001"
+    name: 上证指数
+  - secid: "1.000688"
+    name: 科创50
+  - secid: "0.399006"
+    name: 创业板指
+
+# 技术信号参数
+signals:
+  kline_days: 250          # 拉取K线天数
+  divergence_lookback: 60  # 背离检测回看窗口
+  breakout_windows: [20, 60]  # N日新高/新低突破窗口
+  volume_spike_ratio: 1.5  # 放量阈值（较5日均量）
+
+# 华尔街见闻财经日历
+calendar:
+  days_ahead: 7            # 向后看几天
+  min_importance: 3        # 只看三星及以上
+  countries: [中国, 美国]
+
+# 资金榜（东方财富接口，近5日主力净流入 Top20；同花顺被墙/需cookie时的稳定替代）
+fundflow:
+  top_n: 20
+
+# 财联社电报
+cls:
+  pages: 5                 # 抓几页（每页约20条）
+
+# 知识星球
+zsxq:
+  group_keyword: 黑金       # 用于在已加入星球中自动定位"黑金会员星球"
+  group_id: ""             # 也可直接指定星球ID（优先）
+  hours: 24                # 统计最近24小时
+  max_topics: 100
+
+# 雪球
+xueqiu:
+  hot_posts: 20            # 热帖条数
+  hot_stocks: 30           # 热股榜条数
+
+# 韭研公社（栏目ID需首次抓包后确认，见 README）
+jiuyan:
+  max_articles: 200
+
+# Alpha派（接口需首次抓包后确认，见 README）
+alphapai:
+  hours: 24
