@@ -5,7 +5,23 @@
 #   - code: SH600519
 #     name: 贵州茅台
 #     aliases: [茅台]
-watchlist: []
+# 名称留空或写错都没关系：每次抓取时会用东方财富接口自动解析/校正真实名称
+watchlist:
+  - {code: SH688213, name: 思特威, aliases: []}
+  - {code: SH688279, name: 峰岹科技, aliases: []}
+  - {code: SH688508, name: 芯朋微, aliases: []}
+  - {code: SH688018, name: 乐鑫科技, aliases: []}
+  - {code: SZ300054, name: 鼎龙股份, aliases: []}
+  - {code: SH688256, name: 寒武纪, aliases: []}
+  - {code: SZ300604, name: 长川科技, aliases: []}
+  - {code: SH688008, name: 澜起科技, aliases: []}
+  - {code: SZ300308, name: 中际旭创, aliases: [旭创]}
+  - {code: SH603893, name: 瑞芯微, aliases: []}
+  - {code: SH688099, name: 晶晨股份, aliases: []}
+  - {code: SH688536, name: 思瑞浦, aliases: []}
+  - {code: SH688052, name: 纳芯微, aliases: []}
+  - {code: SH688825, name: "", aliases: []}   # 名称待自动解析
+  - {code: SH688301, name: 奕瑞科技, aliases: []}
 
 # 大盘指数（东方财富 secid 格式：市场.代码，1=沪 0=深）
 indexes:

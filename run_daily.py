@@ -53,6 +53,12 @@ def do_fetch(date_str: str, only: set[str] | None):
             data = fn()
             save_json(date_str, key, data)
             print(f"[{key}] ✅ 已保存 data/{date_str}/{key}.json")
+            if key == "eastmoney":
+                # 用东财解析出的真实名称补全监控池（供后续雪球搜索等使用）
+                resolved = data.get("watchlist_names") or {}
+                for w in cfg.get("watchlist", []):
+                    if resolved.get(w["code"]):
+                        w["name"] = resolved[w["code"]]
         except Exception as e:  # noqa: BLE001
             errors[key] = str(e)
             hint = "（需在 config/credentials.json 配置凭证）" if needs_cred else ""

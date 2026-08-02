@@ -75,8 +75,10 @@ def build_skeleton(date_str: str) -> str:
         if isinstance(kl, list) and len(kl) > 60:
             index_snaps.append(index_snapshot(name, kl, cfg))
     delta = hot_list_delta(date_str)
-    names = [w["name"] for w in cfg.get("watchlist", [])]
+    resolved = em.get("watchlist_names") or {}
+    names = [resolved.get(w["code"]) or w["name"] for w in cfg.get("watchlist", [])]
     names += [x["name"] for x in ths.get("hot_stocks") or []]
+    names = [n for n in names if n]
     mentions = cross_source_mentions(date_str, names)
     graded = grade_watchlist(date_str, cfg, mentions)
     ff = em.get("fundflow") or {}

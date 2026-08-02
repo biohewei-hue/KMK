@@ -22,12 +22,17 @@ FOCUS_KEYWORDS = ["公社内容精选", "学习笔记", "公告内容精选", "�
 def _session(creds: dict):
     j = creds.get("jiuyan") or {}
     headers = dict(j.get("headers") or {})
-    if not headers.get("token"):
-        raise RuntimeError("缺少韭研公社 token（config/credentials.json → jiuyan.headers.token）")
+    cookie = j.get("cookie", "")
+    if not headers.get("token") and not cookie:
+        raise RuntimeError(
+            "缺少韭研公社凭证（config/credentials.json → jiuyan.cookie 或 jiuyan.headers.token）"
+        )
     headers.setdefault("timestamp", str(int(time.time() * 1000)))
     headers.setdefault("platform", "3")
     headers["Content-Type"] = "application/json"
-    return make_session(cookie=j.get("cookie", ""), headers=headers)
+    headers.setdefault("Origin", "https://www.jiuyangongshe.com")
+    headers.setdefault("Referer", "https://www.jiuyangongshe.com/")
+    return make_session(cookie=cookie, headers=headers)
 
 
 def fetch_article_list(s, page: int = 1, limit: int = 20) -> list[dict]:

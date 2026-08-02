@@ -84,6 +84,8 @@ def fetch_all(cfg: dict, creds: dict) -> dict:
     except Exception as e:  # noqa: BLE001
         out["errors"].append(f"hot_stocks: {e}")
     for w in cfg.get("watchlist", []):
+        if not w.get("name"):
+            continue
         try:
             out["watchlist_posts"][w["name"]] = search_stock_posts(s, w["name"])
         except Exception as e:  # noqa: BLE001

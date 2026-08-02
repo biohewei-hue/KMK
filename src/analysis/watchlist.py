@@ -17,11 +17,15 @@ def grade_watchlist(date_str: str, cfg: dict, mentions: dict) -> list[dict]:
     hot = {x["name"]: x for x in ths.get("hot_stocks") or []}
     ff_names = {x["name"] for x in (em.get("fundflow") or {}).get("stock_top20_5d") or []}
     klines = em.get("watchlist_kline") or {}
+    resolved = em.get("watchlist_names") or {}
     sig_cfg = cfg.get("signals", {})
 
     out = []
     for w in cfg.get("watchlist", []):
-        name, code = w["name"], w["code"]
+        code = w["code"]
+        name = resolved.get(code) or w["name"]  # 东财解析的真实名称优先
+        if not name:
+            continue
         score = 0
         reasons = []
 

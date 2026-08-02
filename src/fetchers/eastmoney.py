@@ -7,6 +7,29 @@ from ..http import get_json, make_session
 
 KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 CLIST_URL = "https://push2.eastmoney.com/api/qt/clist/get"
+ULIST_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+
+
+def _secid(code: str) -> str:
+    """SH688213 → 1.688213；SZ300054 → 0.300054"""
+    return ("1." if code.upper().startswith("SH") else "0.") + code[2:]
+
+
+def fetch_names(codes: list[str]) -> dict[str, str]:
+    """批量解析股票真实名称（用于校正/补全 config 里的 watchlist 名称）。"""
+    if not codes:
+        return {}
+    s = make_session()
+    params = {
+        "secids": ",".join(_secid(c) for c in codes),
+        "fields": "f12,f14",
+        "fltt": "2",
+        "invt": "2",
+    }
+    data = get_json(s, ULIST_URL, params=params)
+    rows = (data.get("data") or {}).get("diff") or []
+    by_num = {r.get("f12"): r.get("f14") for r in rows}
+    return {c: by_num.get(c[2:], "") for c in codes}
 
 # 板块类型：东财 fs 参数。若首次运行发现概念/行业内容对调，交换这两个值即可。
 FS_CONCEPT = "m:90+t:3+f:!50"   # 概念板块
@@ -84,13 +107,17 @@ def fetch_all(cfg: dict) -> dict:
     result["fundflow"]["concept_top20_5d"] = _fetch_fundflow_rank(FS_CONCEPT, top_n)
     result["fundflow"]["industry_top20_5d"] = _fetch_fundflow_rank(FS_INDUSTRY, top_n)
     result["fundflow"]["stock_top20_5d"] = _fetch_fundflow_rank(FS_STOCK, top_n)
-    # 监控池个股K线（用于个股技术信号）
+    # 监控池：真实名称解析 + 个股K线（用于个股技术信号）
+    codes = [w["code"] for w in cfg.get("watchlist", [])]
+    try:
+        result["watchlist_names"] = fetch_names(codes)
+    except Exception as e:  # noqa: BLE001
+        result["watchlist_names"] = {}
+        result["names_error"] = str(e)
     result["watchlist_kline"] = {}
-    for w in cfg.get("watchlist", []):
-        code = w["code"]
-        secid = ("1." if code.upper().startswith("SH") else "0.") + code[2:]
+    for code in codes:
         try:
-            result["watchlist_kline"][code] = fetch_kline(secid, days)
+            result["watchlist_kline"][code] = fetch_kline(_secid(code), days)
         except Exception as e:  # noqa: BLE001
             result["watchlist_kline"][code] = {"error": str(e)}
     return result
