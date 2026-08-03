@@ -62,6 +62,7 @@ def harvest(site_key: str, headless: bool, wait: int) -> dict:
     captured: dict[str, dict] = {}   # url → 请求信息
     responses: dict[str, list] = {}  # url → 归一化条目
     creds: dict[str, str] = {}
+    seen_cookie: list[str] = []      # 请求头里的 cookie（浏览器关闭后仍可用）
 
     os.makedirs(PROFILE_DIR, exist_ok=True)
     launch_kwargs = {"headless": headless, "viewport": {"width": 1400, "height": 900}}
@@ -82,6 +83,8 @@ def harvest(site_key: str, headless: bool, wait: int) -> dict:
             for name in site["cred_headers"]:
                 if h.get(name):
                     creds[name] = h[name]
+            if h.get("cookie"):
+                seen_cookie.append(h["cookie"])
             captured[req.url] = {
                 "method": req.method,
                 "headers": {
@@ -112,17 +115,40 @@ def harvest(site_key: str, headless: bool, wait: int) -> dict:
                 print(f"   访问 {url} 超时/失败：{str(e)[:80]}")
 
         if not headless:
-            print("\n浏览器已打开。若未登录请先登录，并点开『每日必看』/『关注』等目标栏目。")
-            print(f"完成后回到这里按 Enter（或等待 {wait} 秒自动结束）...")
-            try:
-                page.wait_for_timeout(wait * 1000)
-            except KeyboardInterrupt:
-                pass
+            print("\n" + "=" * 60)
+            print("浏览器已打开，请在浏览器里完成以下操作：")
+            print("  1. 若未登录 → 先登录")
+            print("  2. 点开目标栏目（Alpha派：蓝宝书 → PaiPai总结 → 每日必看；")
+            print("     韭研公社：关注 → 每日公社内容精选 / 学习笔记 / 盘前纪要）")
+            print("  3. 让列表内容加载出来（多滚动几下更好）")
+            print(f"  4. 完成后【直接关闭浏览器窗口】即可（或等 {wait} 秒自动结束）")
+            print("=" * 60, flush=True)
+            deadline = time.time() + wait
+            while time.time() < deadline:
+                try:
+                    page.wait_for_timeout(1000)
+                    if not ctx.pages:  # 用户关闭了浏览器 → 视为完成
+                        break
+                except Exception:  # noqa: BLE001 - 窗口被关闭时抛错，属正常结束
+                    break
+            print(f"已捕获 {len(captured)} 个接口请求，{len(responses)} 个返回列表数据。")
 
-        cookies = ctx.cookies()
-        cookie_str = "; ".join(f"{c['name']}={c['value']}" for c in cookies
-                               if site["match"].split(".")[-2] in c.get("domain", ""))
-        ctx.close()
+        # 优先用请求头里抓到的 cookie；浏览器已关闭时 ctx.cookies() 会失败
+        cookie_str = seen_cookie[-1] if seen_cookie else ""
+        if not cookie_str:
+            try:
+                key = site["match"].split(".")[-2]
+                cookie_str = "; ".join(
+                    f"{c['name']}={c['value']}"
+                    for c in ctx.cookies()
+                    if key in c.get("domain", "")
+                )
+            except Exception:  # noqa: BLE001 - 浏览器已关闭，无 cookie 可读
+                pass
+        try:
+            ctx.close()
+        except Exception:  # noqa: BLE001
+            pass
 
     return {"creds": creds, "cookie": cookie_str, "requests": captured, "lists": responses}
 
