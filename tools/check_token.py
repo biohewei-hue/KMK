@@ -6,10 +6,12 @@
 
 import base64
 import json
+import os
 import sys
 from datetime import datetime
 
-sys.path.insert(0, __file__.rsplit("/tools/", 1)[0])
+# 兼容 Windows：不能按 "/" 切分路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config import load_credentials  # noqa: E402
 
