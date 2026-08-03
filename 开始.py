@@ -29,6 +29,8 @@ MENU = """
 
    [7]  用 Edge 登录  (上面弹出的浏览器被拦截时改用这个)
    [8]  填写知识星球 cookie
+   [9]  配置飞书推送
+   [10] 发布报告 (生成电脑版网页 + 推送手机版到飞书)
 
    [0]  退出
 
@@ -189,6 +191,57 @@ def do_zsxq_cookie():
     pause()
 
 
+def do_feishu_config():
+    clear()
+    print("""
+   配置飞书推送（把手机版报告推到你的飞书）
+
+   获取 webhook 地址：
+     1. 打开飞书，进入任意一个群（可以自建一个只有你自己的群）
+     2. 群设置 → 群机器人 → 添加机器人 → 自定义机器人
+     3. 起个名字（如「舆情研判」）→ 下一步
+     4. 【安全设置】建议勾选「签名校验」，会给你一个密钥
+     5. 复制 webhook 地址（https://open.feishu.cn/open-apis/bot/v2/hook/...）
+""")
+    try:
+        hook = input("   粘贴 webhook 地址：").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if not hook:
+        print("\n   已取消。")
+        return pause()
+    if "open.feishu.cn" not in hook and "larksuite" not in hook:
+        print("\n   ⚠️  这看起来不像飞书 webhook 地址，但仍会保存。")
+    try:
+        secret = input("   签名密钥（没勾选签名校验就直接回车跳过）：").strip()
+    except (EOFError, KeyboardInterrupt):
+        secret = ""
+
+    path = os.path.join(ROOT, "config", "credentials.json")
+    data = {}
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                pass
+    entry = data.setdefault("feishu", {})
+    entry["webhook"] = hook
+    if secret:
+        entry["secret"] = secret
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"\n   ✅ 已保存。生成报告后选 [10] 即可推送到飞书。")
+    pause()
+
+
+def do_publish():
+    clear()
+    run([os.path.join("tools", "publish.py")],
+        "正在生成电脑版网页并推送手机版到飞书...")
+    pause()
+
+
 ACTIONS = {
     "1": do_install,
     "2": lambda: do_login("alphapai"),
@@ -198,6 +251,8 @@ ACTIONS = {
     "6": do_safe,
     "7": do_login_edge,
     "8": do_zsxq_cookie,
+    "9": do_feishu_config,
+    "10": do_publish,
 }
 
 

@@ -7,7 +7,12 @@ A股每日舆情交叉分析。数据源：韭研公社、知识星球、Alpha�
 1. **只读两个文件**：`data/今日日期/brief.md`（已填好的定量骨架）与 `data/今日日期/digest.json`（压缩后的各源正文）
    - ⚠️ 不要读 `data/日期/` 下的其他原始 json，那些已被 digest 压缩过，重复读只会浪费 token
 2. 把 brief.md 中每个「⬜ 待撰写」替换为分析，写出 `data/今日日期/report.md`
-3. 写完后记录推荐与判断，供次日自动复盘：
+3. 生成两种阅读版本并推送：
+   ```
+   python tools/publish.py <日期>
+   ```
+   电脑版 report.html（完整）+ 手机版飞书卡片（只推结论/见底判断/推荐股/热度）
+4. 记录推荐与判断，供次日自动复盘：
    ```
    python tools/log_picks.py <日期> --picks '[{"code":"SH688256","name":"寒武纪",
      "reason":"...","buy_zone":"580-600","stop":"555","target":"700"}]' \
