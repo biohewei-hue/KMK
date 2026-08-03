@@ -13,3 +13,6 @@ config/credentials.json
 # 每日抓取的原始数据与生成的报告
 data/
 !data/.gitkeep
+
+# 浏览器 profile（含登录态）
+config/.browser_profile/

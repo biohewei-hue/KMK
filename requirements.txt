@@ -1,2 +1,6 @@
 requests>=2.31
 PyYAML>=6.0
+
+# 可选：浏览器自动抓取凭证与接口（tools/harvest_token.py）
+# pip install playwright && playwright install chromium
+playwright>=1.40

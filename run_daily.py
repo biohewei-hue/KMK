@@ -10,6 +10,7 @@
 """
 
 import argparse
+import os
 import sys
 import traceback
 from datetime import datetime
@@ -69,6 +70,22 @@ def do_fetch(date_str: str, only: set[str] | None):
     print(f"\n完成：{len(modules) - len(errors)} 成功 / {len(errors)} 失败")
 
 
+def do_refresh(sites: list[str]):
+    """抓取前用浏览器刷新易过期的凭证（韭研公社 token 每次请求都变）。"""
+    import subprocess
+
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "harvest_token.py")
+    for site in sites:
+        print(f"[refresh] 刷新 {site} 凭证 ...", flush=True)
+        r = subprocess.run(
+            [sys.executable, tool, site, "--headless"], capture_output=True, text=True
+        )
+        print(r.stdout.strip() or r.stderr.strip()[:400])
+        if r.returncode != 0:
+            print(f"[refresh] ⚠️  {site} 刷新失败，将使用 credentials.json 中的现有凭证")
+            print(f"[refresh]     首次使用请先跑：python tools/harvest_token.py {site}")
+
+
 def do_report(date_str: str):
     from src.report.skeleton import write_skeleton
 
@@ -84,11 +101,19 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--only", help="逗号分隔的数据源: " + ",".join(FETCHERS))
     ap.add_argument("--date", default=datetime.now().strftime("%Y-%m-%d"))
+    ap.add_argument(
+        "--refresh",
+        nargs="?",
+        const="jiuyan,alphapai",
+        help="抓取前用浏览器刷新凭证（默认 jiuyan,alphapai）",
+    )
     args = ap.parse_args()
     if not (args.fetch or args.report or args.all):
         ap.print_help()
         sys.exit(1)
     only = set(args.only.split(",")) if args.only else None
+    if args.refresh:
+        do_refresh(args.refresh.split(","))
     if args.fetch or args.all:
         do_fetch(args.date, only)
     if args.report or args.all:

@@ -18,6 +18,8 @@ cp config/credentials.example.json config/credentials.json
 
 # 3. 每日运行（建议收盘后或晚间）
 python run_daily.py --all
+#    韭研公社/Alpha派 凭证会过期，加 --refresh 可先用浏览器自动续期：
+#    python run_daily.py --all --refresh
 
 # 4. 在本仓库打开 Claude Code，说「生成今日报告」
 #    Claude 按 CLAUDE.md 流程写出 data/YYYY-MM-DD/report.md
@@ -48,7 +50,26 @@ python run_daily.py --all
 
 Alpha派与韭研公社的**列表类接口**未公开，程序内置了候选路径自动探测；若探测未命中（运行日志里会显示 `probe_log`），按下面三步接上，无需改代码：
 
-**方式一：HAR 批量导入（推荐，一次搞定，不用自己找是哪个请求）**
+**方式零：浏览器自动抓取（最省事，凭证与接口一次到位）**
+
+韭研公社的 `token` 每次请求都会变（由 `timestamp` 派生，服务端校验时效），手工粘贴撑不过一天。
+用真实浏览器拦截请求可以同时解决「凭证续期」和「接口发现」：
+
+```bash
+pip install playwright && playwright install chromium
+
+# 首次：打开浏览器，你手动登录一次并点开目标栏目（登录态保存在本地 profile）
+python tools/harvest_token.py jiuyan
+python tools/harvest_token.py alphapai
+
+# 之后：无界面静默续期，可直接挂在每日流程前
+python tools/harvest_token.py jiuyan --headless
+python run_daily.py --all --refresh
+```
+
+抓到的 token/timestamp/cookie 自动写入 `credentials.json`，返回条目最多的接口自动登记为列表接口。
+
+**方式一：HAR 批量导入（一次导出，不用自己找是哪个请求）**
 
 ```bash
 # 1. F12 → Network → 只勾 Fetch/XHR → 刷新页面并点开目标栏目
