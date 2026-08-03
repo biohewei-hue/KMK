@@ -3,7 +3,7 @@
 
 用法：
   python run_daily.py --fetch    # 抓取所有数据源 → data/YYYY-MM-DD/*.json
-  python run_daily.py --report   # 生成报告骨架 → data/YYYY-MM-DD/report_skeleton.md
+  python run_daily.py --report   # 生成骨架 → brief.md + digest.json
   python run_daily.py --all      # 抓取 + 骨架
   python run_daily.py --fetch --only ths,cls   # 只抓部分源
   python run_daily.py --date 2026-08-02        # 指定日期
@@ -22,6 +22,7 @@ FETCHERS = {
     "ths": ("同花顺热榜", False),
     "cls": ("财联社电报", False),
     "wscn": ("华尔街见闻日历", False),
+    "sentiment": ("市场情绪指标(涨跌停/连板/成交额)", False),
     "xueqiu": ("雪球", True),
     "zsxq": ("知识星球", True),
     "jiuyan": ("韭研公社", True),
@@ -32,13 +33,16 @@ FETCHERS = {
 def do_fetch(date_str: str, only: set[str] | None):
     cfg = load_config()
     creds = load_credentials()
-    from src.fetchers import alphapai, cls, eastmoney, jiuyan, ths, wscn, xueqiu, zsxq
+    from src.fetchers import (
+        alphapai, cls, eastmoney, jiuyan, sentiment, ths, wscn, xueqiu, zsxq,
+    )
 
     modules = {
         "eastmoney": lambda: eastmoney.fetch_all(cfg),
         "ths": lambda: ths.fetch_all(cfg, creds),
         "cls": lambda: cls.fetch_all(cfg),
         "wscn": lambda: wscn.fetch_all(cfg),
+        "sentiment": lambda: sentiment.fetch_all(cfg, date_str),
         "xueqiu": lambda: xueqiu.fetch_all(cfg, creds),
         "zsxq": lambda: zsxq.fetch_all(cfg, creds),
         "jiuyan": lambda: jiuyan.fetch_all(cfg, creds),
@@ -101,8 +105,9 @@ def do_report(date_str: str):
     from src.report.skeleton import write_skeleton
 
     path = write_skeleton(date_str)
-    print(f"✅ 报告骨架已生成：{path}")
-    print("下一步：在本仓库打开 Claude Code，说『生成今日报告』，Claude 会按 CLAUDE.md 流程完成分析章节。")
+    print(f"✅ 骨架已生成：{path}")
+    print(f"   素材包：{os.path.join(os.path.dirname(path), 'digest.json')}")
+    print("下一步：在本仓库打开 Claude Code，说『生成今日报告』。")
 
 
 def main():

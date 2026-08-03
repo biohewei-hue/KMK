@@ -1,202 +1,204 @@
-"""生成报告骨架 report_skeleton.md：
-定量章节（指数技术数据、热榜对比、资金榜、日历、电报）直接填好；
-定性章节（内容总结、交叉验证、见底判断、荐股）附上原始素材 + 待Claude撰写标记。
-最终报告由 Claude 阅读骨架与 data/日期/*.json 后撰写为 report.md（流程见 CLAUDE.md）。
+"""生成 brief.md（8章精简骨架）与 digest.json（压缩后的素材包）。
+
+设计原则：
+- 程序做机械活（算指标、排序、统计），输出紧凑事实，不堆砌原始列表
+- Claude 只读 digest.json + brief.md 两个文件，不读 8 个原始 json
+- 报告成品目标 4000 字，只给结论不给流水账
 """
 
+import json
 import os
 
-from ..config import day_dir, load_config, load_json
+from ..analysis.digest import build_digest, cross_source_ranking
 from ..analysis.heat import cross_source_mentions, hot_list_delta
+from ..analysis.review import run as run_review
 from ..analysis.signals import index_snapshot
-from ..analysis.watchlist import grade_watchlist
+from ..config import day_dir, load_config, load_json
 
-TODO = "> ⬜ **待Claude撰写**：阅读上方素材与 data/{date}/ 原始数据后完成本节分析。\n"
+TODO = "> ⬜ **待撰写**\n"
 
 
-def _fmt_index(snap: dict) -> str:
-    ma = snap["ma"]
-    macd = snap["macd"]
-    hist_dir = "收窄" if abs(macd["hist"]) < abs(macd["hist_prev"]) else "放大"
+def _fmt_index(s: dict) -> str:
+    ma, macd = s["ma"], s["macd"]
+    pos = []
+    for k, label in [("ma5", "MA5"), ("ma20", "MA20"), ("ma60", "MA60")]:
+        if ma[k]:
+            pos.append(f"{label}{'上' if s['close'] > ma[k] else '下'}({ma[k]})")
     lines = [
-        f"**{snap['name']}**（{snap['date']}）收 {snap['close']}，{snap['pct_chg']:+.2f}%",
-        f"- 均线：MA5 {ma['ma5']} / MA10 {ma['ma10']} / MA20 {ma['ma20']} / MA60 {ma['ma60']}",
-        f"- MACD：DIF {macd['dif']}，DEA {macd['dea']}，柱 {macd['hist']}（较前日{hist_dir}）"
-        f"；RSI14 {snap['rsi14']}；KDJ K{snap['kdj']['k']} D{snap['kdj']['d']} J{snap['kdj']['j']}",
+        f"**{s['name']}** {s['close']} ({s['pct_chg']:+.2f}%) | " + "、".join(pos),
+        f"  MACD {macd['dif']}/{macd['dea']} 柱{macd['hist']}"
+        f"({'收窄' if abs(macd['hist']) < abs(macd['hist_prev']) else '放大'})"
+        f" | RSI {s['rsi14']} | KDJ J{s['kdj']['j']}",
     ]
-    if snap["divergences"]:
-        for s in snap["divergences"]:
-            lines.append(f"- ⚠️ **{s['indicator']} {s['type']}**：{s['detail']}")
-    else:
-        lines.append("- 背离：暂无有效背离信号")
-    if snap["breakouts"]:
-        for s in snap["breakouts"]:
-            lines.append(f"- 🔔 **{s['type']}**：{s['detail']}")
+    for d in s["divergences"]:
+        lines.append(f"  ⚠️ **{d['indicator']}{d['type']}**：{d['detail']}")
+    if not s["divergences"]:
+        lines.append("  背离：无")
+    for b in s["breakouts"]:
+        lines.append(f"  🔔 **{b['type']}**：{b['detail']}")
     return "\n".join(lines)
 
 
-def _fmt_fundflow_table(rows: list[dict]) -> str:
+def _fmt_rank_table(rows: list[dict], cols: list[str]) -> str:
     if not rows:
         return "（无数据）"
-    out = ["| 排名 | 名称 | 近5日主力净流入(亿) | 近5日涨跌幅% |", "| --- | --- | --- | --- |"]
-    for i, r in enumerate(rows):
-        out.append(f"| {i + 1} | {r['name']} | {r['main_net_5d_yi']} | {r['pct_chg_5d']} |")
+    head = "| " + " | ".join(["#", "名称"] + cols) + " |"
+    sep = "| " + " | ".join(["---"] * (len(cols) + 2)) + " |"
+    out = [head, sep]
+    for i, r in enumerate(rows, 1):
+        vals = [str(r.get(c, "—")) for c in cols]
+        out.append(f"| {i} | {r.get('name', '')} | " + " | ".join(vals) + " |")
     return "\n".join(out)
 
 
-def _fmt_hot_delta(delta: dict) -> str:
-    lines = [f"（对比基准：{delta.get('compared_with') or '无历史快照，首日运行'}）", ""]
-    for title, key, fmt in [
-        ("🔥 升温最快", "rising", lambda x: f"{x['name']} 第{x['rank_prev']}→第{x['rank']}名（↑{x['rank_delta']}）"),
-        ("❄️ 降温最快", "falling", lambda x: f"{x['name']} 第{x['rank_prev']}→第{x['rank']}名（↓{-x['rank_delta']}）"),
-        ("🆕 新上榜", "new_entries", lambda x: f"{x['name']} 第{x['rank']}名"),
-        ("📉 掉出榜单", "dropped", lambda x: f"{x['name']}（昨日第{x['rank']}名）"),
-    ]:
-        items = delta.get(key) or []
-        lines.append(f"**{title}**：" + ("、".join(fmt(x) for x in items[:10]) if items else "无"))
-    return "\n".join(lines)
+def _fmt_fundflow(rows: list[dict], n: int = 20) -> str:
+    if not rows:
+        return "（无数据）"
+    return "、".join(
+        f"{r['name']}({r['main_net_5d_yi']}亿)" for r in rows[:n]
+    )
 
 
-def build_skeleton(date_str: str) -> str:
+def _fmt_sentiment(sent: dict) -> str:
+    b = sent.get("breadth") or {}
+    lp = sent.get("limit_pool") or {}
+    nb = sent.get("northbound") or {}
+    lines = []
+    if b:
+        lines.append(
+            f"涨{b['up']}/跌{b['down']} (涨占比{b['up_ratio']}%)｜"
+            f"涨停{b['limit_up']} 跌停{b['limit_down']}｜两市成交{b['amount_yi']:.0f}亿"
+        )
+    if lp and not lp.get("error"):
+        leaders = "、".join(f"{x['name']}{x['boards']}板" for x in (lp.get("leaders") or [])[:5])
+        lines.append(
+            f"连板高度**{lp['max_boards']}板**｜2板以上{lp['boards_2plus']}只｜"
+            f"炸板率{lp['broken_rate']}%｜高标：{leaders or '无'}"
+        )
+    if nb.get("net_yi") is not None:
+        lines.append(f"北向净流入 {nb['net_yi']}亿")
+    return "\n".join(f"- {x}" for x in lines) or "（数据缺失）"
+
+
+def build(date_str: str) -> tuple[str, dict]:
     cfg = load_config()
     em = load_json(date_str, "eastmoney") or {}
     ths = load_json(date_str, "ths") or {}
-    cls_data = load_json(date_str, "cls") or {}
     wscn = load_json(date_str, "wscn") or {}
-    zsxq = load_json(date_str, "zsxq") or {}
-    jiuyan = load_json(date_str, "jiuyan") or {}
-    xueqiu = load_json(date_str, "xueqiu") or {}
-    alphapai = load_json(date_str, "alphapai") or {}
-    todo = TODO.format(date=date_str)
+    sent = load_json(date_str, "sentiment") or {}
 
-    # ---- 计算 ----
-    index_snaps = []
-    for name, kl in (em.get("indexes") or {}).items():
-        if isinstance(kl, list) and len(kl) > 60:
-            index_snaps.append(index_snapshot(name, kl, cfg))
+    # 计算
+    snaps = [
+        index_snapshot(name, kl, cfg)
+        for name, kl in (em.get("indexes") or {}).items()
+        if isinstance(kl, list) and len(kl) > 60
+    ]
     delta = hot_list_delta(date_str)
     resolved = em.get("watchlist_names") or {}
     names = [resolved.get(w["code"]) or w["name"] for w in cfg.get("watchlist", [])]
     names += [x["name"] for x in ths.get("hot_stocks") or []]
-    names = [n for n in names if n]
-    mentions = cross_source_mentions(date_str, names)
-    graded = grade_watchlist(date_str, cfg, mentions)
+    mentions = cross_source_mentions(date_str, [n for n in names if n])
+    ranking = cross_source_ranking(date_str, cfg, mentions, delta)
     ff = em.get("fundflow") or {}
 
-    S = []  # sections
-    S.append(f"# 舆情交叉分析报告 · {date_str}\n")
+    # 监控池异动（只列有信号的，不列打分表）
+    watch_hits = []
+    hot_rank = {x["name"]: x["rank"] for x in ths.get("hot_stocks") or []}
+    ff_names = {x["name"] for x in ff.get("stock_top20_5d") or []}
+    for w in cfg.get("watchlist", []):
+        nm = resolved.get(w["code"]) or w["name"]
+        if not nm:
+            continue
+        sig = []
+        m = (mentions.get("mentions") or {}).get(nm)
+        if m and m["source_count"] >= 2:
+            sig.append(f"{m['source_count']}源提及{m['total']}次")
+        if nm in hot_rank:
+            sig.append(f"热榜第{hot_rank[nm]}")
+        if nm in ff_names:
+            sig.append("资金榜Top20")
+        if sig:
+            watch_hits.append(f"{nm}：" + "、".join(sig))
 
-    S.append("## 今日核心\n" + todo)
+    S = [f"# 舆情研判 · {date_str}\n"]
 
-    S.append("## 〇 · 大盘技术研判（上证指数 / 科创50 / 创业板指）\n")
-    for snap in index_snaps:
-        S.append(_fmt_index(snap) + "\n")
-    S.append("**走势预判与见底判断**（重点：背离信号、趋势突破、市场何时见底）\n" + todo)
+    S.append("## 一、今日结论\n")
+    S.append("（市场状态 / 见底判断 / 明日操作倾向 / 3只推荐股各一句）\n" + TODO)
 
-    S.append("## 一 · 持仓舆情预警（监控池信号分级）\n")
-    if graded:
-        S.append("| 级别 | 股票 | 得分 | 信号 |\n| --- | --- | --- | --- |")
-        for g in graded:
-            S.append(f"| {g['level']} | {g['name']}({g['code']}) | {g['score']} | {'；'.join(g['signals']) or '—'} |")
-        S.append("")
-    else:
-        S.append("（监控池为空：请在 config/config.yaml → watchlist 填入15只个股）\n")
+    S.append("## 二、大盘研判与见底判断\n")
+    for s in snaps:
+        S.append(_fmt_index(s) + "\n")
+    S.append("**市场情绪**\n" + _fmt_sentiment(sent) + "\n")
+    S.append("**研判**（技术图形 + 多源观点交叉 → 未来走势大概率形态 + 见底判断）\n" + TODO)
 
-    S.append("## 二 · 风险热度事件\n" + todo)
-    S.append("## 三 · 机会热度事件\n" + todo)
-    S.append("## 四 · 主线热度事件\n" + todo)
+    S.append("## 三、热度榜\n")
+    S.append("**热度最高**\n" + _fmt_rank_table(
+        ranking["热度最高"], ["提及", "源数", "热榜名次", "主力5日净流入亿"]) + "\n")
+    S.append("**升温最快**\n" + _fmt_rank_table(
+        ranking["升温最快"], ["名次变化", "提及", "源数"]) + "\n")
+    fall = ranking["降温最快"]
+    S.append("**降温最快**：" + ("、".join(
+        f"{x['name']}(第{x['rank_prev']}→{x['rank']})" for x in fall) if fall else "无") + "\n")
+    S.append("**升温原因解读**\n" + TODO)
 
-    S.append("## 五 · 热度变化（同花顺热榜对比）\n")
-    S.append(_fmt_hot_delta(delta) + "\n")
-    hot20 = (ths.get("hot_stocks") or [])[:20]
-    if hot20:
-        S.append("**当前热榜Top20**：" + "、".join(f"{x['rank']}.{x['name']}" for x in hot20) + "\n")
-    S.append("**热度解读**\n" + todo)
+    if watch_hits:
+        S.append("## 三·补 · 我的持仓异动\n" + "\n".join(f"- {h}" for h in watch_hits) + "\n")
 
-    S.append("## 六~八 · 行业/公司深度（MLCC、存储、消费等板块逻辑）\n" + todo)
+    S.append("## 四、资金榜（近5日主力净流入Top20）\n")
+    S.append("**概念**：" + _fmt_fundflow(ff.get("concept_top20_5d") or []) + "\n")
+    S.append("**行业**：" + _fmt_fundflow(ff.get("industry_top20_5d") or []) + "\n")
+    S.append("**个股**：" + _fmt_fundflow(ff.get("stock_top20_5d") or []) + "\n")
 
-    S.append("## 九 · 星球重点股票提醒（黑金会员星球）\n")
-    if zsxq:
-        S.append(f"- 24h 帖数：**{zsxq.get('total_24h', 0)}**，其中文字帖 {len(zsxq.get('talk_posts') or [])} 篇")
-        for t in (zsxq.get("talk_posts") or [])[:30]:
-            txt = (t.get("text") or "").replace("\n", " ")[:200]
-            S.append(f"  - [{t.get('time', '')[:16]}] {txt}")
-        S.append("")
-    else:
-        S.append("（未抓到数据：检查 zsxq cookie）\n")
-    S.append("**文字帖内容归纳 + 个股提及统计**\n" + todo)
+    S.append("## 五、今日最重要的信息\n")
+    S.append("（读 digest.json 后按**重要性**排序，不按来源分类。"
+             "每条格式：结论｜来源标签｜影响标的｜时效｜可信度）\n" + TODO)
 
-    S.append("## 十 · Alpha派推荐与点评（蓝宝书 / PaiPai每日必看）\n")
-    ap_items = (alphapai.get("daily_must_read") or []) + (alphapai.get("bluebook") or [])
-    if ap_items:
-        S.append(f"- 抓取条目 {len(ap_items)} 条，正文 {len(alphapai.get('details') or [])} 篇")
-        for it in ap_items[:20]:
-            S.append(f"  - 《{it.get('title') or (it.get('text') or '')[:40]}》 {it.get('time') or ''}")
-        S.append("")
-    if alphapai.get("errors"):
-        S.append("抓取状态：" + "；".join(alphapai["errors"][:3]) + "\n")
-    S.append("**每日必看内容归纳 + 24h提及统计 + 重点研报**\n" + todo)
+    S.append("## 六、各源精华\n")
+    S.append("（公社/星球/Alpha派/雪球，每源只留最重要3-5条）\n" + TODO)
 
-    S.append("## 十一 · 公社精选（韭研公社·关注栏目）\n")
-    if jiuyan:
-        S.append(f"- 抓取帖子共 {jiuyan.get('total_articles', 0)} 篇；关注栏目命中 {len(jiuyan.get('focus_details') or [])} 篇；精选内链帖 {len(jiuyan.get('linked_details') or [])} 篇")
-        for d in (jiuyan.get("focus_details") or [])[:20]:
-            S.append(f"  - 《{d.get('title')}》")
-        S.append("")
-    else:
-        S.append("（未抓到数据：检查 jiuyan token）\n")
-    S.append("**每日公社内容精选（含链接帖全文）、学习笔记、公告内容精选、盘前纪要 总结分析**\n" + todo)
-
-    S.append("## 十二 · 雪球高讨论帖\n")
-    for p in (xueqiu.get("hot_posts") or [])[:15]:
-        S.append(f"- 《{p.get('title') or (p.get('text') or '')[:40]}》 评论{p.get('replies')} 赞{p.get('likes')} — {p.get('user')}")
-    S.append("\n**热帖观点归纳**\n" + todo)
-
-    S.append("## 十三 · 政策信号（已证实/传闻分级）\n" + todo)
-    S.append("## 十四 · 各方判断比对\n" + todo)
-    S.append("## 十五 · 交叉验证\n")
-    top_mentions = list(mentions.get("mentions", {}).items())[:20]
-    if top_mentions:
-        S.append("跨源提及统计（来源数优先）：")
-        for name, m in top_mentions:
-            srcs = "、".join(f"{k}×{v}" for k, v in m["sources"].items())
-            S.append(f"- **{name}**：{m['total']}次 / {m['source_count']}个来源（{srcs}）")
-        S.append("")
-    S.append(todo)
-    S.append("## 十六 · 小作文（待核实传闻）\n" + todo)
-
-    S.append("## 十七 · 财联社电报精选（时间线）\n")
-    tele = cls_data.get("telegraphs") or []
-    red = [t for t in tele if t.get("is_red")]
-    for t in (red or tele)[:25]:
-        title = t.get("title") or (t.get("content") or "")[:60]
-        S.append(f"- **{t.get('time', '')[-5:]}** {title}")
-    S.append("\n**电报解读**\n" + todo)
-
-    S.append("## 十八 · 中美财经日历（华尔街见闻·三星及以上）\n")
+    S.append("## 七、日历与风险（中美三星及以上）\n")
     cal = wscn.get("calendar") or []
     if cal:
-        S.append("| 时间 | 国家 | ★ | 事件 | 前值 | 预期 | 实际 |\n| --- | --- | --- | --- | --- | --- | --- |")
-        for c in cal:
-            S.append(f"| {c['time']} | {c['country']} | {c['importance']} | {c['title']} | {c.get('previous') or '—'} | {c.get('forecast') or '—'} | {c.get('actual') or '—'} |")
-        S.append("")
+        for c in cal[:15]:
+            S.append(f"- {c['time']} [{c['country']}] {'★' * int(c['importance'])} "
+                     f"{c['title']}（前值{c.get('previous') or '—'} 预期{c.get('forecast') or '—'}）")
     else:
-        S.append("（无数据或抓取失败）\n")
+        S.append("（无数据）")
+    S.append("")
 
-    S.append("## 十九 · 资金榜（近5日主力净流入 Top20）\n")
-    S.append("### 概念板块\n" + _fmt_fundflow_table(ff.get("concept_top20_5d") or []) + "\n")
-    S.append("### 行业板块\n" + _fmt_fundflow_table(ff.get("industry_top20_5d") or []) + "\n")
-    S.append("### 个股\n" + _fmt_fundflow_table(ff.get("stock_top20_5d") or []) + "\n")
+    S.append("## 八、明日推荐（3只）\n")
+    S.append("（逻辑｜催化剂｜买点位｜止损位｜目标空间｜风险。按当日行情自由判断风格）\n" + TODO)
 
-    S.append("## 二十 · 综合研判：热度最高与升温最快的行业/个股\n" + todo)
-    S.append("## 二一 · 明日最值得关注的3只股票（附逻辑与风险）\n" + todo)
-    S.append("\n---\n*数据来源：雪球/同花顺/Alpha派/韭研公社/知识星球/财联社/华尔街见闻/东方财富。本报告为舆情信息聚合分析，不构成投资建议。*\n")
-    return "\n".join(S)
+    review = run_review(date_str)
+    rv = review.get("推荐股复盘") or {}
+    S.append("## 附 · 复盘\n")
+    if rv.get("样本数"):
+        S.append(f"历史推荐 {rv['样本数']} 次，胜率 {rv['胜率%']}%，平均收益 {rv['平均收益%']}%")
+        for r in (rv.get("明细") or [])[-6:]:
+            S.append(f"- {r['推荐日']} {r['股票']}：{r['累计涨跌%']:+.2f}%"
+                     f"（最大 {r['期间最大涨幅%']:+.2f}%，持有{r['持有天数']}天）")
+    else:
+        S.append(rv.get("status", "暂无历史推荐记录"))
+    hist = review.get("见底判断轨迹") or []
+    if hist:
+        S.append("\n**见底判断轨迹**（保持口径一致）")
+        for h in hist[-6:]:
+            S.append(f"- {h['date']}：{h['stance']}")
+    S.append("")
+
+    S.append("\n---\n*信息聚合分析，不构成投资建议。*\n")
+
+    digest = build_digest(date_str, cfg)
+    digest["复盘"] = review
+    return "\n".join(S), digest
 
 
 def write_skeleton(date_str: str) -> str:
-    content = build_skeleton(date_str)
-    path = os.path.join(day_dir(date_str), "report_skeleton.md")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return path
+    brief, digest = build(date_str)
+    d = day_dir(date_str)
+    brief_path = os.path.join(d, "brief.md")
+    with open(brief_path, "w", encoding="utf-8") as f:
+        f.write(brief)
+    with open(os.path.join(d, "digest.json"), "w", encoding="utf-8") as f:
+        json.dump(digest, f, ensure_ascii=False, indent=1)
+    return brief_path
