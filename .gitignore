@@ -6,6 +6,10 @@ venv/
 # 凭证文件：绝不提交
 config/credentials.json
 
+# 抓包文件含 cookie/token，等同凭证
+*.har
+*.curl.txt
+
 # 每日抓取的原始数据与生成的报告
 data/
 !data/.gitkeep

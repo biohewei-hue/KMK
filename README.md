@@ -48,15 +48,27 @@ python run_daily.py --all
 
 Alpha派与韭研公社的**列表类接口**未公开，程序内置了候选路径自动探测；若探测未命中（运行日志里会显示 `probe_log`），按下面三步接上，无需改代码：
 
+**方式一：HAR 批量导入（推荐，一次搞定，不用自己找是哪个请求）**
+
 ```bash
-# 1. F12 → Network → 点开目标栏目（如「每日必看」列表）→ 找到返回文章列表的请求
-# 2. 右键『Copy as cURL (bash)』→ 保存为 my.txt
-# 3. 导入（端点名见 tools/import_curl.py 说明）
+# 1. F12 → Network → 只勾 Fetch/XHR → 刷新页面并点开目标栏目
+# 2. 面板内右键任意请求 → 『Save all as HAR with content』→ 存为 alphapai.har
+# 3. 先看有哪些接口，再自动登记
+python tools/import_har.py alphapai.har                 # 列出全部接口（按疑似列表条目数排序）
+python tools/import_har.py alphapai.har --save alphapai # 自动登记最像列表的接口
+```
+
+**方式二：单个 cURL 导入**
+
+```bash
+# F12 → 目标请求 → 右键『Copy as cURL (bash)』→ 存为 my.txt
 python tools/import_curl.py alphapai.daily_list my.txt
 python tools/import_curl.py jiuyan.article_list my.txt
 ```
 
-导入结果写入 `config/endpoints.json`，其中的认证请求头会被自动剥离（保留在 credentials.json 里，不入库）。
+两种方式的结果都写入 `config/endpoints.json`，其中的认证请求头会被自动剥离（凭证留在 credentials.json，不入库）。
+
+> ⚠️ HAR 与 cURL 文本都含 cookie/token，等同于凭证。`.gitignore` 已排除 `*.har` 与 `*.curl.txt`，但仍请勿分享给第三方。
 
 ## 报告章节
 
