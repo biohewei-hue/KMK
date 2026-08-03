@@ -78,8 +78,10 @@ def _collect_texts(date_str: str) -> list[tuple[str, str]]:
     for p in xq.get("hot_posts") or []:
         out.append(("雪球", (p.get("title") or "") + " " + (p.get("text") or "")))
     ap = load_json(date_str, "alphapai") or {}
-    out.append(("Alpha派", str(ap.get("daily_must_read") or "")))
-    out.append(("Alpha派", str(ap.get("bluebook") or "")))
+    for it in (ap.get("daily_must_read") or []) + (ap.get("bluebook") or []):
+        out.append(("Alpha派", (it.get("title") or "") + " " + (it.get("text") or "")))
+    for d in ap.get("details") or []:
+        out.append(("Alpha派", (d.get("title") or "") + " " + (d.get("text") or "")))
     return out
 
 

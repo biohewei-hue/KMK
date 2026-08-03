@@ -127,8 +127,14 @@ def build_skeleton(date_str: str) -> str:
     S.append("**文字帖内容归纳 + 个股提及统计**\n" + todo)
 
     S.append("## 十 · Alpha派推荐与点评（蓝宝书 / PaiPai每日必看）\n")
+    ap_items = (alphapai.get("daily_must_read") or []) + (alphapai.get("bluebook") or [])
+    if ap_items:
+        S.append(f"- 抓取条目 {len(ap_items)} 条，正文 {len(alphapai.get('details') or [])} 篇")
+        for it in ap_items[:20]:
+            S.append(f"  - 《{it.get('title') or (it.get('text') or '')[:40]}》 {it.get('time') or ''}")
+        S.append("")
     if alphapai.get("errors"):
-        S.append("抓取状态：" + "；".join(alphapai["errors"]) + "\n")
+        S.append("抓取状态：" + "；".join(alphapai["errors"][:3]) + "\n")
     S.append("**每日必看内容归纳 + 24h提及统计 + 重点研报**\n" + todo)
 
     S.append("## 十一 · 公社精选（韭研公社·关注栏目）\n")

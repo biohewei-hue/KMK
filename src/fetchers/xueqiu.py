@@ -8,10 +8,21 @@ SEARCH_URL = "https://xueqiu.com/query/v1/search/status.json"
 
 
 def _session(creds: dict):
+    """有 cookie 用 cookie；没有则访问首页自动领取游客 token。
+
+    雪球的热帖/热股榜等公开接口对游客 token 也返回数据，因此不配置 cookie 也能跑；
+    配置登录 cookie 后可拿到更完整的内容。
+    """
     cookie = (creds.get("xueqiu") or {}).get("cookie", "")
+    s = make_session(cookie=cookie, headers={"Referer": "https://xueqiu.com/"})
     if not cookie:
-        raise RuntimeError("缺少雪球 cookie（config/credentials.json → xueqiu.cookie）")
-    return make_session(cookie=cookie, headers={"Referer": "https://xueqiu.com/"})
+        try:
+            s.get("https://xueqiu.com/", timeout=20)  # 首页会下发 xq_a_token
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"雪球游客 token 获取失败，请改为配置 cookie：{e}") from e
+        if not s.cookies.get("xq_a_token"):
+            raise RuntimeError("未取得雪球游客 token（xq_a_token），请配置 xueqiu.cookie")
+    return s
 
 
 def fetch_hot_posts(s, size: int = 20) -> list[dict]:

@@ -31,16 +31,32 @@ python run_daily.py --all
 
 | 数据源 | 打开的页面 | 要复制的内容 | 填到 credentials.json |
 | --- | --- | --- | --- |
-| 雪球 | xueqiu.com（登录后） | Cookie 全串 | `xueqiu.cookie` |
+| 雪球 | — | **无需任何操作**，程序自动领取游客 token | （可留空） |
 | 知识星球 | wx.zsxq.com（扫码登录） | Cookie 全串（含 `zsxq_access_token`） | `zsxq.cookie` |
-| 韭研公社 | jiuyangongshe.com（登录后） | 请求头里的 `token`（XHR 请求上） | `jiuyan.headers.token` |
-| Alpha派 | 蓝宝书/每日必看页面 | 对应 XHR 请求 → 右键『Copy as cURL』整段 | 发给 Claude 完成接线 |
+| 韭研公社 | jiuyangongshe.com（登录后） | Cookie（含 `SESSION`）+ 请求头 `token` 与 `timestamp` | `jiuyan.cookie/token/timestamp` |
+| Alpha派 | alphapai-web.rabyte.cn | 请求头 `authorization`（JWT）与 `x-device` | `alphapai.authorization/x_device` |
 | 同花顺 | （可选）data.10jqka.com.cn | Cookie 全串 | `ths.cookie` |
 
+- **雪球**：热帖榜、热股榜等接口对游客 token 有效，程序会自动访问首页领取，无需复制 cookie。填入登录 cookie 可获得更完整内容。
 - **知识星球**：星球 ID 不用手动找，程序会按 `config.yaml → zsxq.group_keyword`（默认"黑金"）在你已加入的星球中自动定位；也可直接填 `group_id`。
-- **Alpha派 / 韭研公社栏目**：接口非公开，首次使用把抓包的 cURL 发给 Claude，一次接线后长期使用。
+- **韭研公社**：`token` 与 `timestamp` 由前端私有算法**成对生成**，服务端一起校验，所以两个必须同时复制、同时替换，不能只换一个。
+- **Alpha派**：`authorization` 是 JWT，有效期约 30 天，可用 `python tools/check_token.py` 查看剩余天数。
 - **同花顺资金榜**：默认用东方财富公开接口替代（同源数据，无需凭证）；也可用本机 iFinD 插件导出后替换。
-- Cookie 一般能用数天到数周，失效后重新抓一次即可。**credentials.json 已被 gitignore，绝不会提交到仓库。**
+- **credentials.json 已被 gitignore，绝不会提交到仓库。**
+
+### 接入新接口：cURL 一键导入
+
+Alpha派与韭研公社的**列表类接口**未公开，程序内置了候选路径自动探测；若探测未命中（运行日志里会显示 `probe_log`），按下面三步接上，无需改代码：
+
+```bash
+# 1. F12 → Network → 点开目标栏目（如「每日必看」列表）→ 找到返回文章列表的请求
+# 2. 右键『Copy as cURL (bash)』→ 保存为 my.txt
+# 3. 导入（端点名见 tools/import_curl.py 说明）
+python tools/import_curl.py alphapai.daily_list my.txt
+python tools/import_curl.py jiuyan.article_list my.txt
+```
+
+导入结果写入 `config/endpoints.json`，其中的认证请求头会被自动剥离（保留在 credentials.json 里，不入库）。
 
 ## 报告章节
 
