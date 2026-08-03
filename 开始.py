@@ -4,6 +4,7 @@
 与 开始.bat 功能相同，但 .py 不会被 Windows SmartScreen 拦截。
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -27,6 +28,7 @@ MENU = """
    [6]  只抓免登录的数据源 (抓不通时的保底方案)
 
    [7]  用 Edge 登录  (上面弹出的浏览器被拦截时改用这个)
+   [8]  填写知识星球 cookie
 
    [0]  退出
 
@@ -144,6 +146,49 @@ def do_safe():
     pause()
 
 
+def do_zsxq_cookie():
+    clear()
+    print("""
+   知识星球 cookie 填写
+
+   获取方法：
+     1. 用浏览器打开 wx.zsxq.com 并扫码登录
+     2. 按 F12 → 选 Network(网络) 标签 → 刷新页面
+     3. 点任意一个请求 → 找到 Request Headers 里的 Cookie
+     4. 复制【整行】cookie 内容（必须包含 zsxq_access_token）
+
+   然后粘贴到下面（右键粘贴，粘贴完按回车）：
+""")
+    try:
+        cookie = input("   > ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if not cookie:
+        print("\n   已取消。")
+        return pause()
+    if "zsxq_access_token" not in cookie:
+        print("\n   ⚠️  这段内容里没有 zsxq_access_token，可能复制得不完整。")
+        try:
+            if input("   仍然保存？(y/n)：").strip().lower() != "y":
+                return pause()
+        except (EOFError, KeyboardInterrupt):
+            return
+
+    path = os.path.join(ROOT, "config", "credentials.json")
+    data = {}
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                pass
+    data.setdefault("zsxq", {})["cookie"] = cookie
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"\n   ✅ 已保存到 {path}")
+    pause()
+
+
 ACTIONS = {
     "1": do_install,
     "2": lambda: do_login("alphapai"),
@@ -152,6 +197,7 @@ ACTIONS = {
     "5": lambda: (clear(), run([os.path.join("tools", "check_token.py")]), pause()),
     "6": do_safe,
     "7": do_login_edge,
+    "8": do_zsxq_cookie,
 }
 
 
