@@ -20,7 +20,7 @@ watchlist:
   - {code: SH688099, name: 晶晨股份, aliases: []}
   - {code: SH688536, name: 思瑞浦, aliases: []}
   - {code: SH688052, name: 纳芯微, aliases: []}
-  - {code: SH688825, name: "", aliases: []}   # 名称待自动解析
+  - {code: SH688825, name: 长鑫科技, aliases: [长鑫]}
   - {code: SH688301, name: 奕瑞科技, aliases: []}
 
 # 大盘指数（东方财富 secid 格式：市场.代码，1=沪 0=深）
