@@ -26,6 +26,8 @@ MENU = """
    [5]  检查凭证状态
    [6]  只抓免登录的数据源 (抓不通时的保底方案)
 
+   [7]  用 Edge 登录  (上面弹出的浏览器被拦截时改用这个)
+
    [0]  退出
 
  ============================================================
@@ -92,15 +94,35 @@ def do_install():
     pause()
 
 
-def do_login(site):
+def do_login(site, browser="auto"):
     clear()
     print(LOGIN_TIPS[site])
+    if browser == "edge":
+        print("   本次将驱动你系统里的 Edge（不是自带的浏览器）。")
+        print("   注意：请先关掉所有已打开的 Edge 窗口，否则可能启动失败。\n")
     try:
         input("   准备好后按回车，浏览器就会打开...")
     except (EOFError, KeyboardInterrupt):
         return
-    run([os.path.join("tools", "harvest_token.py"), site])
+    args = [os.path.join("tools", "harvest_token.py"), site]
+    if browser != "auto":
+        args += ["--browser", browser]
+    run(args)
     pause()
+
+
+def do_login_edge():
+    clear()
+    print("\n   用 Edge 登录哪个网站？\n")
+    print("     [1]  Alpha派")
+    print("     [2]  韭研公社\n")
+    try:
+        c = input("   请输入数字：").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    site = {"1": "alphapai", "2": "jiuyan"}.get(c)
+    if site:
+        do_login(site, browser="edge")
 
 
 def do_daily():
@@ -129,6 +151,7 @@ ACTIONS = {
     "4": do_daily,
     "5": lambda: (clear(), run([os.path.join("tools", "check_token.py")]), pause()),
     "6": do_safe,
+    "7": do_login_edge,
 }
 
 
