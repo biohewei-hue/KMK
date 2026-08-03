@@ -75,8 +75,10 @@ def do_install():
     if run(["-m", "pip", "install", "-r", "requirements.txt"]) != 0:
         print("\n   [!] 安装出错，请把上面的报错内容复制给 Claude。")
         return pause()
-    print("\n   正在安装浏览器组件...\n")
-    run(["-m", "playwright", "install", "chromium"])
+    print("\n   正在安装浏览器组件（国内可能较慢）...\n")
+    if run(["-m", "playwright", "install", "chromium"]) != 0:
+        print("\n   [提示] 浏览器组件没装成功（国内下载常失败），")
+        print("          不影响使用——登录时会自动改用你系统里的 Edge。")
 
     cred = os.path.join(ROOT, "config", "credentials.json")
     if not os.path.exists(cred):

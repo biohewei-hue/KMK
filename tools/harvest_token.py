@@ -56,7 +56,7 @@ SITES = {
 AUTH_HEADERS = {"authorization", "token", "timestamp", "x-device", "x-token", "cookie"}
 
 
-def harvest(site_key: str, headless: bool, wait: int) -> dict:
+def harvest(site_key: str, headless: bool, wait: int, browser: str = "auto") -> dict:
     from playwright.sync_api import sync_playwright  # 延迟导入，未装时给友好提示
 
     site = SITES[site_key]
@@ -72,9 +72,20 @@ def harvest(site_key: str, headless: bool, wait: int) -> dict:
         launch_kwargs["executable_path"] = os.environ["CHROMIUM_PATH"]
 
     with sync_playwright() as p:
-        ctx = p.chromium.launch_persistent_context(
-            os.path.join(PROFILE_DIR, site_key), **launch_kwargs
-        )
+        profile = os.path.join(PROFILE_DIR, site_key)
+        if browser == "edge":
+            launch_kwargs["channel"] = "msedge"
+        try:
+            ctx = p.chromium.launch_persistent_context(profile, **launch_kwargs)
+        except Exception:  # noqa: BLE001
+            # playwright 自带的 chromium 没装成功（国内下载常失败）→ 改用系统自带的 Edge
+            if browser == "chromium":
+                raise
+            print("   内置浏览器不可用，改用系统自带的 Edge ...")
+            launch_kwargs.pop("executable_path", None)  # 指定路径会覆盖 channel
+            ctx = p.chromium.launch_persistent_context(
+                profile, channel="msedge", **launch_kwargs
+            )
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
 
         def on_request(req):
@@ -210,6 +221,12 @@ def main():
     ap.add_argument("site", choices=list(SITES))
     ap.add_argument("--headless", action="store_true", help="无界面模式（复用已保存登录态）")
     ap.add_argument("--wait", type=int, default=120, help="有界面模式下的等待秒数")
+    ap.add_argument(
+        "--browser",
+        choices=["auto", "chromium", "edge"],
+        default="auto",
+        help="用哪个浏览器：auto=优先内置chromium，失败自动改用Edge",
+    )
     args = ap.parse_args()
 
     try:
@@ -221,13 +238,15 @@ def main():
     print(f"开始抓取 [{args.site}] ...")
     t0 = time.time()
     try:
-        result = harvest(args.site, args.headless, args.wait)
+        result = harvest(args.site, args.headless, args.wait, args.browser)
     except Exception as e:  # noqa: BLE001 - 转成人话，避免用户面对原始 traceback
         msg = str(e)
         print(f"\n❌ 抓取失败：{msg[:300]}")
         if "Executable doesn't exist" in msg or "playwright install" in msg:
             print("\n   原因：浏览器组件没装好。请在菜单里重新选 [1] 首次安装，")
             print("   或手动运行：python -m playwright install chromium")
+            print("\n   国内下载慢时，也可以直接用系统自带的 Edge：")
+            print(f"   python tools/harvest_token.py {args.site} --browser edge")
         sys.exit(1)
 
     if not result["creds"]:
