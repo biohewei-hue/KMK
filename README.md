@@ -6,6 +6,10 @@
 
 ## 快速开始
 
+**非技术用户**：直接看 [操作指南.md](操作指南.md)，双击 `开始.bat` 走菜单即可，不用敲命令。
+
+**命令行方式**：
+
 ```bash
 pip install -r requirements.txt
 
