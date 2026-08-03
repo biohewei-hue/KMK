@@ -74,16 +74,27 @@ def do_refresh(sites: list[str]):
     """抓取前用浏览器刷新易过期的凭证（韭研公社 token 每次请求都变）。"""
     import subprocess
 
-    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "harvest_token.py")
+    root = os.path.dirname(os.path.abspath(__file__))
+    tool = os.path.join(root, "tools", "harvest_token.py")
     for site in sites:
+        # 没有浏览器 profile 说明从未登录过，静默续期必然失败，直接给出明确指引
+        profile = os.path.join(root, "config", ".browser_profile", site)
+        if not os.path.isdir(profile):
+            print(f"[refresh] ⏭️  跳过 {site}：还没登录过")
+            print(f"[refresh]     请先在菜单里选 [{'3' if site == 'jiuyan' else '2'}] 登录一次")
+            continue
+
         print(f"[refresh] 刷新 {site} 凭证 ...", flush=True)
         r = subprocess.run(
             [sys.executable, tool, site, "--headless"], capture_output=True, text=True
         )
-        print(r.stdout.strip() or r.stderr.strip()[:400])
+        if r.stdout.strip():
+            print(r.stdout.strip())
         if r.returncode != 0:
+            if r.stderr.strip():  # 真实原因在 stderr 里，必须打出来
+                print("[refresh] 错误详情：")
+                print("   " + r.stderr.strip()[-800:].replace("\n", "\n   "))
             print(f"[refresh] ⚠️  {site} 刷新失败，将使用 credentials.json 中的现有凭证")
-            print(f"[refresh]     首次使用请先跑：python tools/harvest_token.py {site}")
 
 
 def do_report(date_str: str):

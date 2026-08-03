@@ -220,9 +220,23 @@ def main():
 
     print(f"开始抓取 [{args.site}] ...")
     t0 = time.time()
-    result = harvest(args.site, args.headless, args.wait)
+    try:
+        result = harvest(args.site, args.headless, args.wait)
+    except Exception as e:  # noqa: BLE001 - 转成人话，避免用户面对原始 traceback
+        msg = str(e)
+        print(f"\n❌ 抓取失败：{msg[:300]}")
+        if "Executable doesn't exist" in msg or "playwright install" in msg:
+            print("\n   原因：浏览器组件没装好。请在菜单里重新选 [1] 首次安装，")
+            print("   或手动运行：python -m playwright install chromium")
+        sys.exit(1)
+
     if not result["creds"]:
-        print("\n❌ 未捕获到凭证请求头。请确认已登录（首次请用有界面模式）。")
+        print("\n❌ 未捕获到凭证请求头。")
+        if args.headless:
+            print("   无界面模式依赖已保存的登录态。请先用有界面模式登录一次：")
+            print(f"   在菜单里选 [{'3' if args.site == 'jiuyan' else '2'}]")
+        else:
+            print("   请确认已在浏览器里登录，并点开了目标栏目。")
         sys.exit(1)
     persist(args.site, result)
     print(f"\n耗时 {time.time() - t0:.0f}s")
