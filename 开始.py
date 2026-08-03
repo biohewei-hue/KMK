@@ -31,6 +31,7 @@ MENU = """
    [8]  填写知识星球 cookie
    [9]  配置飞书推送
    [10] 发布报告 (生成电脑版网页 + 推送手机版到飞书)
+   [11] 打开今日数据文件夹 (找 brief.md / digest.json 发给 Claude)
 
    [0]  退出
 
@@ -235,6 +236,32 @@ def do_feishu_config():
     pause()
 
 
+def do_open_data():
+    clear()
+    from datetime import datetime
+
+    date = datetime.now().strftime("%Y-%m-%d")
+    folder = os.path.join(ROOT, "data", date)
+    if not os.path.isdir(folder):
+        print(f"\n   ❌ 还没有今天({date})的数据，请先选 [4] 抓取。\n")
+        return pause()
+
+    need = ["brief.md", "digest.json"]
+    print(f"\n   今日数据目录：{folder}\n")
+    for n in need:
+        f = os.path.join(folder, n)
+        ok = os.path.exists(f)
+        size = f"{os.path.getsize(f) / 1024:.0f} KB" if ok else "缺失"
+        print(f"   {'✅' if ok else '❌'} {n}  {size}")
+    print("""
+   把上面两个文件发给 Claude，即可生成报告。
+   （报告写好后保存为 report.md 放回本目录，再选 [10] 发布）
+""")
+    if os.name == "nt":
+        os.startfile(folder)  # noqa: S606 - Windows 打开资源管理器
+    pause()
+
+
 def do_publish():
     clear()
     run([os.path.join("tools", "publish.py")],
@@ -253,6 +280,7 @@ ACTIONS = {
     "8": do_zsxq_cookie,
     "9": do_feishu_config,
     "10": do_publish,
+    "11": do_open_data,
 }
 
 
