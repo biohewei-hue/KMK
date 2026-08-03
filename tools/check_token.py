@@ -14,6 +14,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.config import load_credentials  # noqa: E402
+from src.curl_import import load_endpoints  # noqa: E402
 
 
 def jwt_expiry(token: str):
@@ -59,6 +60,24 @@ def main():
 
     x = (creds.get("xueqiu") or {}).get("cookie", "")
     print(f"{'✅ 已配置登录 cookie' if x else 'ℹ️  未配置，将自动使用游客 token'} 雪球")
+
+    # 列表接口是否已登记（登录抓取成功的关键标志）
+    print("\n--- 接口登记状态 ---")
+    eps = load_endpoints()
+    for src, name, label in [
+        ("alphapai", "daily_list", "Alpha派 每日必看列表"),
+        ("jiuyan", "article_list", "韭研公社 文章列表"),
+    ]:
+        got = (eps.get(src) or {}).get(name)
+        if got:
+            print(f"✅ {label} → {got.get('url', '')}")
+        else:
+            print(f"❌ {label} 未登记：请在菜单里重新登录一次该网站")
+
+    ok = all((eps.get(s) or {}).get(n) for s, n in
+             [("alphapai", "daily_list"), ("jiuyan", "article_list")])
+    print("\n" + ("🎉 全部就绪，可以选 [4] 抓取数据了"
+                  if ok else "⚠️  还有网站没抓通，但不影响其他章节，也可先选 [4] 试跑"))
 
 
 if __name__ == "__main__":
