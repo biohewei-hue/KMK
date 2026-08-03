@@ -10,20 +10,34 @@ from collections import defaultdict
 from ..config import load_json
 
 # 每源正文长度上限（字符）
+# 报告要求 8000 字且带论据，素材必须够厚——压得太狠会导致"有结论无依据"
 LIMITS = {
-    "jiuyan_focus": 2000,   # 公社精选/学习笔记/盘前纪要（最高价值，给最多额度）
-    "jiuyan_linked": 1200,  # 精选帖内链接指向的帖子
-    "alphapai": 1500,       # 蓝宝书/每日必看
-    "zsxq": 800,            # 星球文字帖
-    "xueqiu": 300,          # 雪球热帖
-    "cls": 150,             # 财联社电报
+    "jiuyan_focus": 3500,   # 公社精选/学习笔记/盘前纪要（最高价值，给最多额度）
+    "jiuyan_linked": 2000,  # 精选帖内链接指向的帖子
+    "alphapai": 2500,       # 蓝宝书/每日必看
+    "zsxq": 1200,           # 星球文字帖
+    "xueqiu": 500,          # 雪球热帖
+    "cls": 200,             # 财联社电报
 }
 
 # 各源保留条数上限
 COUNTS = {
-    "jiuyan_focus": 12, "jiuyan_linked": 15, "alphapai": 12,
-    "zsxq": 30, "xueqiu": 12, "cls": 40,
+    "jiuyan_focus": 15, "jiuyan_linked": 20, "alphapai": 15,
+    "zsxq": 40, "xueqiu": 15, "cls": 50,
 }
+
+# digest.json 总量兜底（字符）。各源都写满时理论上限近20万字符，
+# 超支会拖慢报告生成，故按价值从低到高依次裁剪。
+TOTAL_BUDGET = 90000
+
+# 裁剪优先级：越靠前越先被砍。公社栏目帖是论据主要来源，永不裁剪。
+TRIM_ORDER = [
+    ("财联社", None),
+    ("雪球", None),
+    ("知识星球", "文字帖"),
+    ("Alpha派", "每日必看"),
+    ("韭研公社", "精选内链帖"),
+]
 
 # 模板化噪音：免责声明、推广、页脚
 NOISE = [
@@ -165,6 +179,37 @@ def build_digest(date_str: str, cfg: dict) -> dict:
         for t in red[: COUNTS["cls"]]
     ]
 
+    return enforce_budget(d)
+
+
+def _size(obj) -> int:
+    import json as _json
+
+    return len(_json.dumps(obj, ensure_ascii=False))
+
+
+def enforce_budget(d: dict, budget: int = TOTAL_BUDGET) -> dict:
+    """总量超支时按价值从低到高裁剪，保护公社栏目帖（论据主要来源）。"""
+    if _size(d) <= budget:
+        return d
+    trimmed = []
+    for src, key in TRIM_ORDER:
+        node = d["sources"].get(src)
+        if node is None:
+            continue
+        lst = node if isinstance(node, list) else node.get(key)
+        if not isinstance(lst, list):
+            continue
+        # 每轮砍掉该源末尾三分之一，直到达标
+        before = len(lst)
+        while _size(d) > budget and len(lst) > 3:
+            del lst[-max(1, len(lst) // 3):]
+        if len(lst) < before:
+            trimmed.append(f"{src}{'/' + key if key else ''} {before}→{len(lst)}条")
+        if _size(d) <= budget:
+            break
+    if trimmed:
+        d["_裁剪说明"] = f"总量超 {budget} 字符，已裁剪：" + "、".join(trimmed)
     return d
 
 
