@@ -20,16 +20,28 @@ from ..normalize import deep_text, normalize_list
 BASE = "https://alphapai-web.rabyte.cn/external/alpha/api"
 WEB = "https://alphapai-web.rabyte.cn"
 
-# 已由抓包确认的详情接口
+# 已由抓包确认的接口
 REPORT_DETAIL = BASE + "/mix/hot/topic/report/detail/v2"
+COUNT_TODAY = BASE + "/reading/count/today"  # 今日阅读计数，兼作鉴权自检
 
-# 列表接口未抓包时的候选路径（首次运行自动探测，命中后打印出来即可固化）
+# 列表接口未抓包时的候选路径（首次运行自动探测，命中后会打印出来）
+_PAGE = {"pageNum": "1", "pageSize": "20"}
 LIST_CANDIDATES = [
-    (BASE + "/mix/hot/topic/report/list/v2", {"type": "21", "pageNum": "1", "pageSize": "20", "isUs": "false"}),
-    (BASE + "/mix/hot/topic/report/page/v2", {"type": "21", "pageNum": "1", "pageSize": "20", "isUs": "false"}),
-    (BASE + "/mix/hot/topic/report/list", {"type": "21", "pageNum": "1", "pageSize": "20"}),
-    (BASE + "/mix/hot/topic/list/v2", {"type": "21", "pageNum": "1", "pageSize": "20"}),
-    (BASE + "/mix/hot/topic/page/v2", {"type": "21", "pageNum": "1", "pageSize": "20"}),
+    # reading 命名空间（前端路由 /reading/home/* 对应，命中概率最高）
+    (BASE + "/reading/list/today", _PAGE),
+    (BASE + "/reading/today", _PAGE),
+    (BASE + "/reading/list", _PAGE),
+    (BASE + "/reading/page", _PAGE),
+    (BASE + "/reading/focus/list", _PAGE),
+    (BASE + "/reading/home/list", _PAGE),
+    (BASE + "/reading/article/list", _PAGE),
+    (BASE + "/reading/daily/list", _PAGE),
+    (BASE + "/reading/report/list", _PAGE),
+    # mix/hot/topic 命名空间（与已确认的详情接口同源）
+    (BASE + "/mix/hot/topic/report/list/v2", {**_PAGE, "type": "21", "isUs": "false"}),
+    (BASE + "/mix/hot/topic/report/page/v2", {**_PAGE, "type": "21", "isUs": "false"}),
+    (BASE + "/mix/hot/topic/report/list", {**_PAGE, "type": "21"}),
+    (BASE + "/mix/hot/topic/list/v2", {**_PAGE, "type": "21"}),
 ]
 
 
@@ -50,6 +62,11 @@ def _session(creds: dict):
         headers["x-device"] = a["x_device"]
     headers.update(a.get("headers") or {})
     return make_session(cookie=a.get("cookie", ""), headers=headers)
+
+
+def check_auth(s) -> dict:
+    """用今日阅读计数接口验证 authorization 是否有效（接口已确认可用）。"""
+    return get_json(s, COUNT_TODAY, retries=1)
 
 
 def fetch_detail(s, item_id: str, is_us: bool = False) -> dict:
@@ -96,7 +113,17 @@ def probe_lists(s) -> tuple[list[dict], list[str]]:
 
 def fetch_all(cfg: dict, creds: dict) -> dict:
     s = _session(creds)
-    out = {"daily_must_read": [], "bluebook": [], "details": [], "probe_log": [], "errors": []}
+    out = {"daily_must_read": [], "bluebook": [], "details": [],
+           "count_today": None, "probe_log": [], "errors": []}
+
+    # 先验鉴权：token 失效时直接给出明确提示，避免后续一连串误导性报错
+    try:
+        out["count_today"] = check_auth(s)
+    except Exception as e:  # noqa: BLE001
+        out["errors"].append(
+            f"鉴权失败（authorization 可能已过期，请重新抓包）：{str(e)[:120]}"
+        )
+        return out
 
     for key, name in [("daily_must_read", "daily_list"), ("bluebook", "bluebook_list")]:
         try:
