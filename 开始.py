@@ -35,6 +35,7 @@ MENU = """
    [11] 打开今日数据文件夹 (找 brief.md / digest.json 发给 Claude)
    [12] 备份配置 (换电脑时用，含登录凭证)
    [14] 单独测试某个数据源 (排查用)
+   [15] 重置某个网站的连接 (登录坏了从头来)
 
    [0]  退出
 
@@ -334,6 +335,68 @@ def do_test_source():
     pause()
 
 
+def do_reset_site():
+    clear()
+    import shutil
+
+    print("\n   重置哪个网站的连接？\n")
+    print("     [1]  Alpha派")
+    print("     [2]  韭研公社\n")
+    print("   重置会清掉：浏览器登录态、已登记的接口、该站凭证")
+    print("   清完后需要重新走一遍登录流程。\n")
+    try:
+        c = input("   请输入数字（回车取消）：").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    site = {"1": "alphapai", "2": "jiuyan"}.get(c)
+    if not site:
+        return
+
+    # 1) 浏览器 profile
+    prof = os.path.join(ROOT, "config", ".browser_profile", site)
+    if os.path.isdir(prof):
+        shutil.rmtree(prof, ignore_errors=True)
+        print(f"\n   ✅ 已清除浏览器登录态")
+
+    # 2) 已登记的列表接口（保留抓包确认过的详情接口）
+    ep_path = os.path.join(ROOT, "config", "endpoints.json")
+    if os.path.exists(ep_path):
+        with open(ep_path, encoding="utf-8") as f:
+            try:
+                eps = json.load(f)
+            except json.JSONDecodeError:
+                eps = {}
+        node = eps.get(site) or {}
+        for k in ("daily_list", "bluebook_list", "article_list", "article_detail"):
+            if node.pop(k, None):
+                print(f"   ✅ 已清除接口登记 {site}.{k}")
+        with open(ep_path, "w", encoding="utf-8") as f:
+            json.dump(eps, f, ensure_ascii=False, indent=2)
+
+    # 3) 凭证
+    cred_path = os.path.join(ROOT, "config", "credentials.json")
+    if os.path.exists(cred_path):
+        with open(cred_path, encoding="utf-8") as f:
+            try:
+                creds = json.load(f)
+            except json.JSONDecodeError:
+                creds = {}
+        if creds.pop(site, None):
+            with open(cred_path, "w", encoding="utf-8") as f:
+                json.dump(creds, f, ensure_ascii=False, indent=2)
+            print(f"   ✅ 已清除 {site} 凭证")
+
+    label = "Alpha派" if site == "alphapai" else "韭研公社"
+    print(f"""
+   {label} 已重置。接下来：
+     1. 选 [7] → 选 {c}，在弹出的浏览器里登录
+     2. 【关键】把目标栏目点开，让文章列表显示出来，滚动几屏
+     3. 关闭浏览器窗口
+     4. 选 [5] 看是否出现「✅ ...列表」
+""")
+    pause()
+
+
 def do_backup():
     clear()
     import zipfile
@@ -391,6 +454,7 @@ ACTIONS = {
     "12": do_backup,
     "13": do_claude_report,
     "14": do_test_source,
+    "15": do_reset_site,
 }
 
 
