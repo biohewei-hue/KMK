@@ -22,7 +22,9 @@ MENU = """
    [2]  登录 Alpha派    (弹浏览器，登录后点开「每日必看」)
    [3]  登录 韭研公社    (弹浏览器，登录后点开「关注」栏目)
 
-   [4]  抓取今日数据 + 生成报告骨架      <<< 每天点这个
+   [4]  抓取今日数据                     <<< 每天第1步
+   [13] 生成报告 (调用本机 Claude Code)   <<< 每天第2步
+   [10] 发布报告 (电脑版网页 + 手机版飞书) <<< 每天第3步
 
    [5]  检查凭证状态
    [6]  只抓免登录的数据源 (抓不通时的保底方案)
@@ -30,7 +32,6 @@ MENU = """
    [7]  用 Edge 登录  (上面弹出的浏览器被拦截时改用这个)
    [8]  填写知识星球 cookie
    [9]  配置飞书推送
-   [10] 发布报告 (生成电脑版网页 + 推送手机版到飞书)
    [11] 打开今日数据文件夹 (找 brief.md / digest.json 发给 Claude)
    [12] 备份配置 (换电脑时用，含登录凭证)
 
@@ -263,6 +264,43 @@ def do_open_data():
     pause()
 
 
+def do_claude_report():
+    clear()
+    import shutil
+    from datetime import datetime
+
+    date = datetime.now().strftime("%Y-%m-%d")
+    brief = os.path.join(ROOT, "data", date, "brief.md")
+    if not os.path.exists(brief):
+        print(f"\n   ❌ 今天({date})还没有数据，请先选 [4] 抓取。\n")
+        return pause()
+
+    claude = shutil.which("claude")
+    if not claude:
+        print("""
+   ❌ 没找到本机版 Claude Code。
+
+   安装方法（装一次就够）：
+     1. 去 nodejs.org 下载安装 Node.js
+     2. 打开 PowerShell，运行：
+            npm install -g @anthropic-ai/claude-code
+     3. 再运行 claude 登录一次你的账号
+
+   装好后重新选 [13] 即可。
+
+   （不想装也行：选 [11] 把 brief.md 和 digest.json 发给网页版 Claude，
+     写好的 report.md 放回 data 目录，同样能用 [10] 发布）
+""")
+        return pause()
+
+    print("\n   正在调用 Claude Code 生成报告...")
+    print("   过程中可能会询问是否允许读写文件，选允许即可。\n")
+    subprocess.run([claude, "生成今日报告"], cwd=ROOT)
+    report = os.path.join(ROOT, "data", date, "report.md")
+    print(f"\n   {'✅ 报告已生成：' + report if os.path.exists(report) else '⚠️  没找到 report.md，可能未生成完成'}")
+    pause()
+
+
 def do_backup():
     clear()
     import zipfile
@@ -318,6 +356,7 @@ ACTIONS = {
     "10": do_publish,
     "11": do_open_data,
     "12": do_backup,
+    "13": do_claude_report,
 }
 
 
