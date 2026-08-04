@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 
 from ..config import DATA_DIR
-from ..fetchers.eastmoney import fetch_kline
+from ..fetchers import ths_market
 
 TRACK_DIR = os.path.join(DATA_DIR, "track")
 PICKS_PATH = os.path.join(TRACK_DIR, "picks.json")
@@ -49,9 +49,9 @@ def log_bottom_call(date_str: str, stance: str, evidence: str):
     return BOTTOM_PATH
 
 
-def _secid(code: str) -> str:
-    c = code.upper().replace("SH", "").replace("SZ", "")
-    return ("1." if c.startswith(("60", "68", "51", "11")) else "0.") + c
+def _ths_code(code: str) -> str:
+    """SH600519 → hs_600519"""
+    return "hs_" + code.upper().replace("SH", "").replace("SZ", "")
 
 
 def verify_picks(today: str, lookback_days: int = 10) -> dict:
@@ -65,7 +65,7 @@ def verify_picks(today: str, lookback_days: int = 10) -> dict:
     for entry in recent:
         for p in entry.get("picks", []):
             try:
-                kl = fetch_kline(_secid(p["code"]), 30)
+                kl = ths_market.fetch_kline(_ths_code(p["code"]), 30)
             except Exception:  # noqa: BLE001
                 continue
             after = [k for k in kl if k["date"] > entry["date"]]

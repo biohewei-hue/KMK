@@ -145,8 +145,8 @@ def do_daily():
 def do_safe():
     clear()
     run(
-        ["run_daily.py", "--all", "--only", "eastmoney,ths,cls,wscn,xueqiu"],
-        "只抓不需要登录的数据源（大盘技术研判、资金榜、热榜、财联社电报、财经日历、雪球热帖）...",
+        ["run_daily.py", "--all", "--only", "ths_market,ths,cls,wscn,sentiment"],
+        "只抓不需要登录的数据源（指数K线、资金榜、热榜、情绪指标、财联社电报、财经日历）...",
     )
     pause()
 

@@ -58,8 +58,6 @@ def main():
     print(f"{'✅' if ok else '❌'} 知识星球 cookie"
           + ("" if ok else "：需包含 zsxq_access_token"))
 
-    x = (creds.get("xueqiu") or {}).get("cookie", "")
-    print(f"{'✅ 已配置登录 cookie' if x else 'ℹ️  未配置，将自动使用游客 token'} 雪球")
 
     # 列表接口是否已登记（登录抓取成功的关键标志）
     print("\n--- 接口登记状态 ---")

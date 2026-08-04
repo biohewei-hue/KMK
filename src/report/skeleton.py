@@ -2,8 +2,8 @@
 
 设计原则：
 - 程序做机械活（算指标、排序、统计），输出紧凑事实，不堆砌原始列表
-- Claude 只读 digest.json + brief.md 两个文件，不读 8 个原始 json
-- 报告成品目标 4000 字，只给结论不给流水账
+- Claude 只读 digest.json + brief.md 两个文件，不读各源原始 json
+- 报告成品目标 8000 字，结论必须带论据
 """
 
 import json
@@ -60,29 +60,29 @@ def _fmt_fundflow(rows: list[dict], n: int = 20) -> str:
 
 
 def _fmt_sentiment(sent: dict) -> str:
-    b = sent.get("breadth") or {}
+    amt = sent.get("amount") or {}
     lp = sent.get("limit_pool") or {}
-    nb = sent.get("northbound") or {}
     lines = []
-    if b:
-        lines.append(
-            f"涨{b['up']}/跌{b['down']} (涨占比{b['up_ratio']}%)｜"
-            f"涨停{b['limit_up']} 跌停{b['limit_down']}｜两市成交{b['amount_yi']:.0f}亿"
-        )
+    if amt.get("amount_yi"):
+        pct = amt.get("amount_pctile_60d")
+        tail = f"，处于近60日 {pct:.0f}% 分位{'（接近地量）' if pct is not None and pct <= 20 else ''}" if pct is not None else ""
+        lines.append(f"两市成交 **{amt['amount_yi']:.0f}亿**{tail}")
     if lp and not lp.get("error"):
         leaders = "、".join(f"{x['name']}{x['boards']}板" for x in (lp.get("leaders") or [])[:5])
         lines.append(
-            f"连板高度**{lp['max_boards']}板**｜2板以上{lp['boards_2plus']}只｜"
-            f"炸板率{lp['broken_rate']}%｜高标：{leaders or '无'}"
+            f"涨停{lp['zt_count']}家 炸板{lp['zb_count']}家｜**炸板率{lp['broken_rate']}%**"
         )
-    if nb.get("net_yi") is not None:
-        lines.append(f"北向净流入 {nb['net_yi']}亿")
+        lines.append(
+            f"**连板高度{lp['max_boards']}板**｜2板以上{lp['boards_2plus']}只｜高标：{leaders or '无'}"
+        )
+    elif lp.get("error"):
+        lines.append(f"连板/炸板数据缺失（{lp['error'][:60]}）")
     return "\n".join(f"- {x}" for x in lines) or "（数据缺失）"
 
 
 def build(date_str: str) -> tuple[str, dict]:
     cfg = load_config()
-    em = load_json(date_str, "eastmoney") or {}
+    em = load_json(date_str, "ths_market") or {}
     ths = load_json(date_str, "ths") or {}
     wscn = load_json(date_str, "wscn") or {}
     sent = load_json(date_str, "sentiment") or {}
@@ -154,7 +154,7 @@ def build(date_str: str) -> tuple[str, dict]:
              "每条格式：结论｜来源标签｜影响标的｜时效｜可信度）\n" + TODO)
 
     S.append("## 六、各源精华\n")
-    S.append("（公社/星球/Alpha派/雪球，每源只留最重要3-5条）\n" + TODO)
+    S.append("（公社/星球/Alpha派，每源留最重要5-8条）\n" + TODO)
 
     S.append("## 七、日历与风险（中美三星及以上）\n")
     cal = wscn.get("calendar") or []

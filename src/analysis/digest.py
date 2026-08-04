@@ -1,4 +1,4 @@
-"""把 8 个原始 json 压缩成一个 digest.json，供 Claude 单文件读取。
+"""把各源原始 json 压缩成一个 digest.json，供 Claude 单文件读取。
 
 四步压缩：去模板 → 去重合并 → 限长 → 按价值排序。
 目标：读入从 ~100k tokens 降到 ~20k。
@@ -16,14 +16,13 @@ LIMITS = {
     "jiuyan_linked": 2000,  # 精选帖内链接指向的帖子
     "alphapai": 2500,       # 蓝宝书/每日必看
     "zsxq": 1200,           # 星球文字帖
-    "xueqiu": 500,          # 雪球热帖
     "cls": 200,             # 财联社电报
 }
 
 # 各源保留条数上限
 COUNTS = {
     "jiuyan_focus": 15, "jiuyan_linked": 20, "alphapai": 15,
-    "zsxq": 40, "xueqiu": 15, "cls": 50,
+    "zsxq": 40, "cls": 50,
 }
 
 # digest.json 总量兜底（字符）。各源都写满时理论上限近20万字符，
@@ -33,7 +32,6 @@ TOTAL_BUDGET = 90000
 # 裁剪优先级：越靠前越先被砍。公社栏目帖是论据主要来源，永不裁剪。
 TRIM_ORDER = [
     ("财联社", None),
-    ("雪球", None),
     ("知识星球", "文字帖"),
     ("Alpha派", "每日必看"),
     ("韭研公社", "精选内链帖"),
@@ -153,20 +151,6 @@ def build_digest(date_str: str, cfg: dict) -> dict:
         "附件标题": attachments[:20],  # PDF/音频不解析内容
     }
 
-    # —— 雪球：热帖观点 ——
-    xq = load_json(date_str, "xueqiu") or {}
-    posts = sorted(
-        xq.get("hot_posts") or [], key=lambda p: -(p.get("replies") or 0)
-    )[: COUNTS["xueqiu"]]
-    d["sources"]["雪球"] = [
-        {
-            "title": p.get("title") or "",
-            "text": _trim(p.get("text") or "", LIMITS["xueqiu"]),
-            "评论数": p.get("replies"),
-        }
-        for p in posts
-    ]
-
     # —— 财联社：只留加红重要电报 ——
     cl = load_json(date_str, "cls") or {}
     tele = cl.get("telegraphs") or []
@@ -215,7 +199,7 @@ def enforce_budget(d: dict, budget: int = TOTAL_BUDGET) -> dict:
 
 def cross_source_ranking(date_str: str, cfg: dict, mentions: dict, delta: dict) -> dict:
     """热度排行：跨源提及 + 热榜排名变化 + 资金流，合成两个榜单。"""
-    em = load_json(date_str, "eastmoney") or {}
+    em = load_json(date_str, "ths_market") or {}
     ths = load_json(date_str, "ths") or {}
     ff = {x["name"]: x for x in (em.get("fundflow") or {}).get("stock_top20_5d") or []}
     hot_rank = {x["name"]: x["rank"] for x in ths.get("hot_stocks") or []}

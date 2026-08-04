@@ -1,6 +1,6 @@
 """热度分析：
 1. 同花顺热榜 今日 vs 昨日 对比 → 升温最快 / 降温最快 / 新上榜 / 掉出榜单
-2. 跨源个股提及统计：知识星球、韭研公社、Alpha派、财联社、雪球中出现的股票名计数
+2. 跨源个股提及统计：知识星球、韭研公社、Alpha派、财联社中出现的股票名计数
 """
 
 import os
@@ -74,9 +74,6 @@ def _collect_texts(date_str: str) -> list[tuple[str, str]]:
     cls_data = load_json(date_str, "cls") or {}
     for t in cls_data.get("telegraphs") or []:
         out.append(("财联社", (t.get("title") or "") + " " + (t.get("content") or "")))
-    xq = load_json(date_str, "xueqiu") or {}
-    for p in xq.get("hot_posts") or []:
-        out.append(("雪球", (p.get("title") or "") + " " + (p.get("text") or "")))
     ap = load_json(date_str, "alphapai") or {}
     for it in (ap.get("daily_must_read") or []) + (ap.get("bluebook") or []):
         out.append(("Alpha派", (it.get("title") or "") + " " + (it.get("text") or "")))

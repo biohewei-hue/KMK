@@ -1,7 +1,7 @@
 """监控池个股信号分级：强关注 / 关注 / 观察。
 
 打分维度：
-- 舆情：跨源提及数与来源数（雪球/同花顺热榜/Alpha派/韭研公社/星球/财联社）
+- 舆情：跨源提及数与来源数（同花顺热榜/Alpha派/韭研公社/星球/财联社）
 - 热榜：是否上同花顺热榜、排名变化
 - 技术：背离/突破信号
 - 资金：是否进入近5日主力净流入Top20
@@ -12,7 +12,7 @@ from .signals import detect_breakouts, detect_divergence
 
 
 def grade_watchlist(date_str: str, cfg: dict, mentions: dict) -> list[dict]:
-    em = load_json(date_str, "eastmoney") or {}
+    em = load_json(date_str, "ths_market") or {}
     ths = load_json(date_str, "ths") or {}
     hot = {x["name"]: x for x in ths.get("hot_stocks") or []}
     ff_names = {x["name"] for x in (em.get("fundflow") or {}).get("stock_top20_5d") or []}

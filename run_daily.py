@@ -18,32 +18,59 @@ from datetime import datetime
 from src.config import load_config, load_credentials, save_json
 
 FETCHERS = {
-    "eastmoney": ("东方财富(指数K线/资金榜)", False),
+    "ths_market": ("同花顺行情(指数K线/资金榜)", False),
     "ths": ("同花顺热榜", False),
     "cls": ("财联社电报", False),
     "wscn": ("华尔街见闻日历", False),
-    "sentiment": ("市场情绪指标(涨跌停/连板/成交额)", False),
-    "xueqiu": ("雪球", True),
+    "sentiment": ("市场情绪(连板/炸板率/成交额)", False),
     "zsxq": ("知识星球", True),
     "jiuyan": ("韭研公社", True),
     "alphapai": ("Alpha派", True),
 }
 
 
+def _market_with_fallback(cfg: dict, creds: dict) -> dict:
+    """同花顺为主；指数K线或资金榜任一落空时，用东方财富补齐缺的那部分。"""
+    from src.fetchers import eastmoney, ths_market
+
+    data = ths_market.fetch_all(cfg, creds)
+    data["source"] = "同花顺"
+    need_idx = not data.get("indexes")
+    need_ff = not any((data.get("fundflow") or {}).values())
+    if not (need_idx or need_ff):
+        return data
+
+    print("[ths_market] ⚠️  同花顺部分数据为空，用东方财富兜底 ...", flush=True)
+    try:
+        em = eastmoney.fetch_all(cfg)
+    except Exception as e:  # noqa: BLE001
+        data.setdefault("errors", []).append(f"东财兜底也失败: {str(e)[:100]}")
+        return data
+
+    if need_idx and em.get("indexes"):
+        data["indexes"] = em["indexes"]
+        data["watchlist_kline"] = em.get("watchlist_kline") or data.get("watchlist_kline")
+        data["watchlist_names"] = em.get("watchlist_names")
+        data["source"] = "同花顺(指数用东财兜底)"
+    if need_ff and any((em.get("fundflow") or {}).values()):
+        data["fundflow"] = em["fundflow"]
+        data["source"] = data["source"] + "+资金榜东财兜底"
+    return data
+
+
 def do_fetch(date_str: str, only: set[str] | None):
     cfg = load_config()
     creds = load_credentials()
     from src.fetchers import (
-        alphapai, cls, eastmoney, jiuyan, sentiment, ths, wscn, xueqiu, zsxq,
+        alphapai, cls, jiuyan, sentiment, ths, ths_market, wscn, zsxq,
     )
 
     modules = {
-        "eastmoney": lambda: eastmoney.fetch_all(cfg),
+        "ths_market": lambda: _market_with_fallback(cfg, creds),
         "ths": lambda: ths.fetch_all(cfg, creds),
         "cls": lambda: cls.fetch_all(cfg),
         "wscn": lambda: wscn.fetch_all(cfg),
-        "sentiment": lambda: sentiment.fetch_all(cfg, date_str),
-        "xueqiu": lambda: xueqiu.fetch_all(cfg, creds),
+        "sentiment": lambda: sentiment.fetch_all(cfg, date_str, creds),
         "zsxq": lambda: zsxq.fetch_all(cfg, creds),
         "jiuyan": lambda: jiuyan.fetch_all(cfg, creds),
         "alphapai": lambda: alphapai.fetch_all(cfg, creds),
@@ -58,7 +85,7 @@ def do_fetch(date_str: str, only: set[str] | None):
             data = fn()
             save_json(date_str, key, data)
             print(f"[{key}] ✅ 已保存 data/{date_str}/{key}.json")
-            if key == "eastmoney":
+            if key == "ths_market":
                 # 用东财解析出的真实名称补全监控池（供后续雪球搜索等使用）
                 resolved = data.get("watchlist_names") or {}
                 for w in cfg.get("watchlist", []):
