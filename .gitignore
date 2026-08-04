@@ -16,3 +16,6 @@ data/
 
 # 浏览器 profile（含登录态）
 config/.browser_profile/
+
+# 配置备份含凭证，不入库
+KMK配置备份_*.zip

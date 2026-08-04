@@ -32,6 +32,7 @@ MENU = """
    [9]  配置飞书推送
    [10] 发布报告 (生成电脑版网页 + 推送手机版到飞书)
    [11] 打开今日数据文件夹 (找 brief.md / digest.json 发给 Claude)
+   [12] 备份配置 (换电脑时用，含登录凭证)
 
    [0]  退出
 
@@ -262,6 +263,41 @@ def do_open_data():
     pause()
 
 
+def do_backup():
+    clear()
+    import zipfile
+    from datetime import datetime
+
+    cfg_dir = os.path.join(ROOT, "config")
+    out = os.path.join(ROOT, f"KMK配置备份_{datetime.now():%Y%m%d}.zip")
+    # 只打包凭证与配置，不含浏览器 profile（体积大且换机后重登更可靠）
+    files = ["credentials.json", "endpoints.json", "config.yaml"]
+
+    picked = []
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for n in files:
+            f = os.path.join(cfg_dir, n)
+            if os.path.exists(f):
+                z.write(f, arcname=f"config/{n}")
+                picked.append(n)
+
+    print(f"\n   ✅ 已生成备份：{out}\n")
+    for n in files:
+        print(f"   {'✅' if n in picked else '—'} {n}")
+    print("""
+   换电脑的做法：
+     1. 把这个 zip 拷到新电脑（U盘/微信/网盘都行）
+     2. 新电脑上下载并解压 KMK，先跑 [1] 首次安装
+     3. 把 zip 里的 config 文件夹解压覆盖到 KMK 文件夹
+     4. 跑 [7] 重新登录一次（浏览器登录态不在备份里）
+
+   ⚠️ 这个 zip 含你的登录凭证，别发给别人、别传公开网盘。
+""")
+    if os.name == "nt":
+        os.startfile(ROOT)  # noqa: S606
+    pause()
+
+
 def do_publish():
     clear()
     run([os.path.join("tools", "publish.py")],
@@ -281,6 +317,7 @@ ACTIONS = {
     "9": do_feishu_config,
     "10": do_publish,
     "11": do_open_data,
+    "12": do_backup,
 }
 
 
