@@ -34,6 +34,7 @@ MENU = """
    [9]  配置飞书推送
    [11] 打开今日数据文件夹 (找 brief.md / digest.json 发给 Claude)
    [12] 备份配置 (换电脑时用，含登录凭证)
+   [14] 单独测试某个数据源 (排查用)
 
    [0]  退出
 
@@ -301,6 +302,38 @@ def do_claude_report():
     pause()
 
 
+SOURCES = [
+    ("ths_market", "同花顺行情(K线/资金榜)"), ("ths", "同花顺热榜"),
+    ("sentiment", "情绪指标(连板/炸板/成交额)"), ("cls", "财联社电报"),
+    ("wscn", "财经日历"), ("zsxq", "知识星球"),
+    ("jiuyan", "韭研公社"), ("alphapai", "Alpha派"),
+]
+
+
+def do_test_source():
+    clear()
+    print("\n   单独测试一个数据源（便于定位是哪个源出问题）\n")
+    for i, (_, label) in enumerate(SOURCES, 1):
+        print(f"     [{i}] {label}")
+    try:
+        c = input("\n   请输入数字：").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if not c.isdigit() or not 1 <= int(c) <= len(SOURCES):
+        return
+    key, label = SOURCES[int(c) - 1]
+    clear()
+    run(["run_daily.py", "--fetch", "--only", key], f"正在测试 {label} ...")
+    from datetime import datetime
+
+    f = os.path.join(ROOT, "data", datetime.now().strftime("%Y-%m-%d"), f"{key}.json")
+    if os.path.exists(f):
+        size = os.path.getsize(f)
+        print(f"\n   {'✅' if size > 200 else '⚠️  文件很小，可能没抓到内容'} {f}（{size / 1024:.1f} KB）")
+        print("   把这个文件发给 Claude 即可定位问题。")
+    pause()
+
+
 def do_backup():
     clear()
     import zipfile
@@ -357,6 +390,7 @@ ACTIONS = {
     "11": do_open_data,
     "12": do_backup,
     "13": do_claude_report,
+    "14": do_test_source,
 }
 
 
