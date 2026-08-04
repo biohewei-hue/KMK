@@ -19,8 +19,8 @@ MENU = """
 
    [1]  首次安装        (第一次使用选这个，装完不用再选)
 
-   [2]  登录 Alpha派    (弹浏览器，登录后点开「每日必看」)
-   [3]  登录 韭研公社    (弹浏览器，登录后点开「关注」栏目)
+   [2]  登录 Alpha派    (用 Edge，登录后点开「每日必看」)
+   [3]  登录 韭研公社    (用 Edge，登录后点开「关注」栏目)
 
    [4]  抓取今日数据                     <<< 每天第1步
    [13] 生成报告 (调用本机 Claude Code)   <<< 每天第2步
@@ -29,7 +29,7 @@ MENU = """
    [5]  检查凭证状态
    [6]  只抓免登录的数据源 (抓不通时的保底方案)
 
-   [7]  用 Edge 登录  (上面弹出的浏览器被拦截时改用这个)
+   [7]  改用内置浏览器登录 (Edge 起不来时的备用)
    [8]  填写知识星球 cookie
    [9]  配置飞书推送
    [11] 打开今日数据文件夹 (找 brief.md / digest.json 发给 Claude)
@@ -86,10 +86,7 @@ def do_install():
     if run(["-m", "pip", "install", "-r", "requirements.txt"]) != 0:
         print("\n   [!] 安装出错，请把上面的报错内容复制给 Claude。")
         return pause()
-    print("\n   正在安装浏览器组件（国内可能较慢）...\n")
-    if run(["-m", "playwright", "install", "chromium"]) != 0:
-        print("\n   [提示] 浏览器组件没装成功（国内下载常失败），")
-        print("          不影响使用——登录时会自动改用你系统里的 Edge。")
+    print("\n   [跳过] 不下载浏览器组件——登录直接用你系统自带的 Edge。")
 
     cred = os.path.join(ROOT, "config", "credentials.json")
     if not os.path.exists(cred):
@@ -99,16 +96,17 @@ def do_install():
         with open(cred, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"\n   已生成凭证文件 {cred}")
-    print("\n   [OK] 安装完成！接下来请依次选 [2] 和 [3] 登录。")
+    print("\n   [OK] 安装完成！接下来请依次选 [2] 和 [3] 用 Edge 登录。")
     pause()
 
 
-def do_login(site, browser="auto"):
+def do_login(site, browser="edge"):
     clear()
     print(LOGIN_TIPS[site])
     if browser == "edge":
-        print("   本次将驱动你系统里的 Edge（不是自带的浏览器）。")
-        print("   注意：请先关掉所有已打开的 Edge 窗口，否则可能启动失败。\n")
+        print("   ⚠️  请先关掉所有已打开的 Edge 窗口，否则可能启动失败。\n")
+    else:
+        print("   本次用 Playwright 内置浏览器（不是你的 Edge）。\n")
     try:
         input("   准备好后按回车，浏览器就会打开...")
     except (EOFError, KeyboardInterrupt):
@@ -122,7 +120,7 @@ def do_login(site, browser="auto"):
 
 def do_login_edge():
     clear()
-    print("\n   用 Edge 登录哪个网站？\n")
+    print("\n   用内置浏览器登录哪个网站？\n")
     print("     [1]  Alpha派")
     print("     [2]  韭研公社\n")
     try:
@@ -131,7 +129,7 @@ def do_login_edge():
         return
     site = {"1": "alphapai", "2": "jiuyan"}.get(c)
     if site:
-        do_login(site, browser="edge")
+        do_login(site, browser="chromium")
 
 
 def do_daily():
@@ -389,7 +387,7 @@ def do_reset_site():
     label = "Alpha派" if site == "alphapai" else "韭研公社"
     print(f"""
    {label} 已重置。接下来：
-     1. 选 [7] → 选 {c}，在弹出的浏览器里登录
+     1. 选 [{"2" if site == "alphapai" else "3"}]，在弹出的 Edge 里登录
      2. 【关键】把目标栏目点开，让文章列表显示出来，滚动几屏
      3. 关闭浏览器窗口
      4. 选 [5] 看是否出现「✅ ...列表」
@@ -441,8 +439,8 @@ def do_publish():
 
 ACTIONS = {
     "1": do_install,
-    "2": lambda: do_login("alphapai"),
-    "3": lambda: do_login("jiuyan"),
+    "2": lambda: do_login("alphapai", browser="edge"),
+    "3": lambda: do_login("jiuyan", browser="edge"),
     "4": do_daily,
     "5": lambda: (clear(), run([os.path.join("tools", "check_token.py")]), pause()),
     "6": do_safe,

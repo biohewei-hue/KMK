@@ -11,7 +11,8 @@
 之后每日刷新（无界面，复用已保存的登录态）：
     python tools/harvest_token.py jiuyan --headless
 
-依赖：pip install playwright && playwright install chromium
+默认驱动系统自带的 Edge（无需下载浏览器组件）。
+依赖：pip install playwright
 """
 
 import argparse
@@ -56,7 +57,7 @@ SITES = {
 AUTH_HEADERS = {"authorization", "token", "timestamp", "x-device", "x-token", "cookie"}
 
 
-def harvest(site_key: str, headless: bool, wait: int, browser: str = "auto") -> dict:
+def harvest(site_key: str, headless: bool, wait: int, browser: str = "edge") -> dict:
     from playwright.sync_api import sync_playwright  # 延迟导入，未装时给友好提示
 
     site = SITES[site_key]
@@ -73,19 +74,21 @@ def harvest(site_key: str, headless: bool, wait: int, browser: str = "auto") -> 
 
     with sync_playwright() as p:
         profile = os.path.join(PROFILE_DIR, site_key)
-        if browser == "edge":
+        # 默认驱动系统自带的 Edge（用户日常用 Edge，登录态与插件环境一致，
+        # 且 Edge 有微软签名不会被安全软件拦截）
+        if browser in ("edge", "auto"):
             launch_kwargs["channel"] = "msedge"
+            launch_kwargs.pop("executable_path", None)  # 指定路径会覆盖 channel
         try:
             ctx = p.chromium.launch_persistent_context(profile, **launch_kwargs)
         except Exception:  # noqa: BLE001
-            # playwright 自带的 chromium 没装成功（国内下载常失败）→ 改用系统自带的 Edge
-            if browser == "chromium":
-                raise
-            print("   内置浏览器不可用，改用系统自带的 Edge ...")
-            launch_kwargs.pop("executable_path", None)  # 指定路径会覆盖 channel
-            ctx = p.chromium.launch_persistent_context(
-                profile, channel="msedge", **launch_kwargs
-            )
+            if browser == "edge":
+                raise  # 用户明确要 Edge，不静默换别的
+            print("   Edge 启动失败，改用内置 chromium ...")
+            launch_kwargs.pop("channel", None)
+            if os.environ.get("CHROMIUM_PATH"):
+                launch_kwargs["executable_path"] = os.environ["CHROMIUM_PATH"]
+            ctx = p.chromium.launch_persistent_context(profile, **launch_kwargs)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
 
         def on_request(req):
@@ -128,7 +131,7 @@ def harvest(site_key: str, headless: bool, wait: int, browser: str = "auto") -> 
 
         if not headless:
             print("\n" + "=" * 60)
-            print("浏览器已打开，请在浏览器里完成以下操作：")
+            print("Edge 已打开，请在浏览器里完成以下操作：")
             print("  1. 若未登录 → 先登录")
             print("  2. 点开目标栏目（Alpha派：蓝宝书 → PaiPai总结 → 每日必看；")
             print("     韭研公社：关注 → 每日公社内容精选 / 学习笔记 / 盘前纪要）")
@@ -223,9 +226,9 @@ def main():
     ap.add_argument("--wait", type=int, default=120, help="有界面模式下的等待秒数")
     ap.add_argument(
         "--browser",
-        choices=["auto", "chromium", "edge"],
-        default="auto",
-        help="用哪个浏览器：auto=优先内置chromium，失败自动改用Edge",
+        choices=["edge", "auto", "chromium"],
+        default="edge",
+        help="用哪个浏览器：默认 edge（系统自带）；auto=Edge失败时回退内置chromium",
     )
     args = ap.parse_args()
 
@@ -242,11 +245,13 @@ def main():
     except Exception as e:  # noqa: BLE001 - 转成人话，避免用户面对原始 traceback
         msg = str(e)
         print(f"\n❌ 抓取失败：{msg[:300]}")
-        if "Executable doesn't exist" in msg or "playwright install" in msg:
-            print("\n   原因：浏览器组件没装好。请在菜单里重新选 [1] 首次安装，")
-            print("   或手动运行：python -m playwright install chromium")
-            print("\n   国内下载慢时，也可以直接用系统自带的 Edge：")
-            print(f"   python tools/harvest_token.py {args.site} --browser edge")
+        if "msedge" in msg or "channel" in msg.lower():
+            print("\n   原因：没能启动 Edge。请检查：")
+            print("     1. 是否已【完全关闭】所有 Edge 窗口（任务管理器里也不能有残留进程）")
+            print("     2. 系统是否装了 Microsoft Edge")
+            print("\n   仍然不行的话，在菜单里选 [7] 改用内置浏览器。")
+        elif "Executable doesn't exist" in msg or "playwright install" in msg:
+            print("\n   原因：内置浏览器组件没装。运行：python -m playwright install chromium")
         sys.exit(1)
 
     if not result["creds"]:
